@@ -3,29 +3,30 @@ from os import access
 from PPlay.window import *
 from PPlay.sprite import *
 from PPlay.gameimage import *
+from PPlay.animation import *
 
 # Variáveis GLobais
 resolution = {'x' : 1280, 'y' : 720}
 
+class Menu:
+    def __init__(self, width=0, height=0):
+        self.resolution = {'x':width, 'y':height}
+        self.main_window = Window(self.resolution['x'], self.resolution['y'])
+        
+        self.background = GameImage('src/fundo_menu.jpg')
+        self.background.image = pygame.transform.scale(self.background.image, (self.resolution['x'], self.resolution['y']))
+        self.background.width = self.main_window.width
+        self.background.height = self.main_window.height
 
-def initialize_menu():
-    global resolution
 
-    # Inicialização da Janela Principal
-    main_window = Window(resolution['x'], resolution['y'])
-    main_window.set_title('Blockspell')
+    def close(self):
+        self.main_window.close()
 
-    # Inicialização do Menu
-    menu_background = GameImage('src/fundo_menu.jpg')
-    menu_background.image = pygame.transform.scale(menu_background.image, (resolution['x'], resolution['y']))
-    menu_background.width = main_window.width
-    menu_background.height = main_window.height
 
-    return [main_window, menu_background]
+menu = Menu(1200, 720)
+menu.main_window.set_title('Blockspell')
 
-main_window, menu_background = initialize_menu()
-
-# Game Loop
+# Menu Loop
 while True:
-    menu_background.draw()
-    main_window.update()
+    menu.background.draw()
+    menu.main_window.update()
