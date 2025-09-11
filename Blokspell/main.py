@@ -11,8 +11,16 @@ menu.main_window.set_title('Blockspell')
 # Menu Loop
 while True:
     menu.background.draw()
-    menu.play_btn.draw()
+    
+    # Animations
+    menu.falling_blocks_anim(0.2)
     for block in menu.blocks:
         block.draw()
-    menu.falling_blocks_anim()
+
+#    menu.enemies_anim(2)
+ #   for enemie in menu.enemies:
+  #      enemie.draw()
+    
+
+    menu.play_btn.draw()
     menu.main_window.update()
