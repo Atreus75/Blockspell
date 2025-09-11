@@ -13,7 +13,7 @@ while True:
     menu.background.draw()
     
     # Animations
-    menu.falling_blocks_anim(0.2)
+    menu.falling_blocks_anim(1)
     for block in menu.blocks:
         block.draw()
 
@@ -21,6 +21,9 @@ while True:
  #   for enemie in menu.enemies:
   #      enemie.draw()
     
-
+    menu.play_btn_anim(0.7)
     menu.play_btn.draw()
+    menu.mage_head.draw()
+    menu.mage_hand1.draw()
+    menu.mage_hand2.draw()
     menu.main_window.update()

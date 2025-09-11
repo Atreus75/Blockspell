@@ -55,19 +55,25 @@ class Menu:
             block.y = self.resolution['y']
         self.last_block_renderization = time()
 
-
         # Play button configuration
         self.play_btn = GameImage('src/play_button1.png')
         self.play_btn = Utils.centralize_over_object(self.play_btn, self.main_window)
- 
-        # Pre-Configures the enemies animation
-        self.enemies = [Sprite('src/gollira_transparente.gif'), Sprite('src/cachorro_transparente.gif'), Sprite('src/rato.gif')]
-        for enemie in self.enemies:
-            enemie.image = pygame.transform.scale(enemie.image, (self.resolution['x']/100*10, self.resolution['y']/100*10))
-            enemie.y = self.resolution['y']-130
-            enemie.x = randint(-5, -1) - int(enemie.width)
-        self.enemie_ocupied_positions = []
-        self.last_enemie_renderization = time()
+        self.play_btn.y = self.play_btn.y+75
+        self.last_play_btn_animation = time();
+
+        # Mage animation
+        self.mage_head = GameImage('src/cabeça_mago.png')
+        self.mage_head.image = pygame.transform.scale(self.mage_head.image, (self.resolution['x']/100*60, self.resolution['y']/100*80))
+        self.mage_head.x = self.resolution['x']/2 - int(self.mage_head.image.get_width()/2)
+        self.mage_head.y = 0
+
+        self.mage_hand1 = GameImage('src/mao1.png')
+        self.mage_hand1.x = self.play_btn.x - int(self.play_btn.width)/2 + 75
+        self.mage_hand1.y = self.play_btn.y - int(self.play_btn.height)/2 - 10
+
+        self.mage_hand2 = GameImage('src/mao2.png')
+        self.mage_hand2.x = self.mage_hand1.x - 55
+        self.mage_hand2.y = self.mage_hand1.y - 10
 
     def falling_blocks_anim(self, interval_secs):
         block = choice(self.blocks)
@@ -79,17 +85,15 @@ class Menu:
                 if block.x in self.block_ocupied_positions:
                     self.block_ocupied_positions.remove(block.x)
                 
-                #first_space = range(0, int(self.play_btn.x)-150)
-                #second_space = range(int(self.play_btn.x+self.play_btn.width+150), int(self.resolution['x'])-int(block.width))
-                #pos_x = choice(list(first_space)+list(second_space))
-                pos_x = randint(0, self.resolution['x']-int(block.width))
+                first_space = range(0, int(self.mage_head.x)-50)
+                second_space = range(int(self.mage_head.x+self.mage_head.width+50), int(self.resolution['x'])-int(block.width))
+                pos_x = choice(list(first_space)+list(second_space))
                 while pos_x in self.block_ocupied_positions:
-                    #pos_x = choice(list(first_space)+list(second_space))
-                    pos_x = randint(0, self.resolution['x']-int(block.width))
+                    pos_x = choice(list(first_space)+list(second_space))
                 block.x = pos_x
-                block.y = randint(5, 10)-block.height
+                block.y = randint(5, 15)-block.height
                 self.block_ocupied_positions.append(pos_x)
-        block.move_y(5)
+        block.move_y(4)
 
     def enemies_anim(self, interval_secs):
         enemie = choice(self.enemies)
@@ -106,6 +110,11 @@ class Menu:
                 self.enemie_ocupied_positions.append(pos_x)
         enemie.move_x(-2)
 
+    def play_btn_anim(self, interval_secs):
+        if time() - self.last_play_btn_animation >= interval_secs:
+            self.play_btn.x = self.play_btn.x * -1
+            self.last_play_btn_animation = time()
+            
 
     def close(self):
         self.main_window.close()
