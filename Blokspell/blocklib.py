@@ -25,12 +25,12 @@ class Menu:
     def __init__(self, width=0, height=0):
         self.resolution = {'x':width, 'y':height}
         self.main_window = Window(self.resolution['x'], self.resolution['y'])
-        self.main_window.set_fullscreen()
 
         self.background = GameImage('src/fundo_menu.jpg')
         self.background.image = pygame.transform.scale(self.background.image, (self.resolution['x'], self.resolution['y']))
         self.background.width = self.main_window.width
         self.background.height = self.main_window.height
+        self.last_window_animation = 0
 
     def preset_blocks(self):
         # Pre-configures the little blocks for their background animation
@@ -87,9 +87,9 @@ class Menu:
         self.last_mage_animation = time()
         self.hand_vely = 1
 
-    def animate_falling_blocks(self, interval_secs):
+    def animate_falling_blocks(self, interval_secs, play_pressed=False):
         block = choice(self.blocks)
-        if time()-self.last_block_renderization >= interval_secs:
+        if time()-self.last_block_renderization >= interval_secs and play_pressed == False:
             self.last_block_renderization = time()
 
             if block.y >= self.resolution['y']:    
