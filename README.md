@@ -2,13 +2,13 @@
 
 ## HighConcept
 
-    BlockSpell é um autobattler medieval inovador onde você controla um poderoso mago que deve defender seu castelo contra hordas de inimigos. O diferencial está no sistema de combate: para lançar feitiços e melhorar seus atributos, você precisa resolver desafios inspirados em Tetris. Encaixe as peças mágicas corretamente para causar dano, ganhar mana ou vida. À medida que o tempo passa, ondas cada vez maiores de inimigos mais resistentes testarão suas habilidades de raciocínio rápido e planejamento estratégico, criando uma experiência frenética que combina quebra-cabeças e combate tático.
+BlockSpell é um autobattler medieval inovador onde você controla um poderoso mago que deve defender seu castelo contra hordas de inimigos. O diferencial está no sistema de combate: para lançar feitiços e melhorar seus atributos, você precisa resolver desafios inspirados em Tetris. Encaixe as peças mágicas corretamente para causar dano, ganhar mana ou vida. À medida que o tempo passa, ondas cada vez maiores de inimigos mais resistentes testarão suas habilidades de raciocínio rápido e planejamento estratégico, criando uma experiência frenética que combina quebra-cabeças e combate tático.
 
 ## Gameplay e Enredo
 
-    A mecânica principal consiste em formar linhas com peças de diferentes formatos e cores, sendo que as cores indicam a função específica de cada peça. O jogador receberá um conjunto de 4 peças aleatórias e deverá decidir estrategicamente a ordem, o momento e a posição em que elas cairão para formar linhas completas. Quando uma linha é completada, os efeitos dos blocos (mana, vida, dano e feitiços) são automaticamente aplicados ao mago e seus inimigos.
+A mecânica principal consiste em formar linhas com peças de diferentes formatos e cores, sendo que as cores indicam a função específica de cada peça. O jogador receberá um conjunto de 4 peças aleatórias e deverá decidir estrategicamente a ordem, o momento e a posição em que elas cairão para formar linhas completas. Quando uma linha é completada, os efeitos dos blocos (mana, vida, dano e feitiços) são automaticamente aplicados ao mago e seus inimigos.
 
-    O enredo se passa na longínqua era medieval, onde o Reino está sendo atacado constantemente por criaturas criadas por um mago negro. Como protetor do castelo e único mago de seu reino, é nosso dever proteger os portões de entrada.
+O enredo se passa na longínqua era medieval, onde o Reino está sendo atacado constantemente por criaturas criadas por um mago negro. Como protetor do castelo e único mago de seu reino, é nosso dever proteger os portões de entrada.
 
 ## Interface de Usuário
 
@@ -20,13 +20,13 @@
 
 ### Status do Mago
 
-    Esta área do HUD será destinada à exibição do HP e Mana do mago principal.
+Esta área do HUD será destinada à exibição do HP e Mana do mago principal.
 
 ![image.png](BlockSpell%202614cfa41db680ea88fff4b9670e895d/image.png)
 
 ### Status do Inimigo
 
-    Nesta área será exibido o HP dos inimigos, como na sketch abaixo:
+Nesta área será exibido o HP dos inimigos, como na sketch abaixo:
 
 ![image.png](BlockSpell%202614cfa41db680ea88fff4b9670e895d/image%201.png)
 
@@ -52,7 +52,7 @@
 
 ## Arte Conceito e Referências
 
-    A conceito artístico visual do jogo é inspirado na estética dreamcore e no característico estilo dos desenhos criados no MS Paint. A inspiração para a criação do conceito do jogo surgiu da combinação entre um jogo de Tetris matemático e um vídeo de um mago gritando frases aleatórias.
+A conceito artístico visual do jogo é inspirado na estética dreamcore e no característico estilo dos desenhos criados no MS Paint. A inspiração para a criação do conceito do jogo surgiu da combinação entre um jogo de Tetris matemático e um vídeo de um mago gritando frases aleatórias.
 
     
 
