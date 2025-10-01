@@ -105,7 +105,7 @@ class Menu:
                 block.y = randint(-10, -5) - block.height
                 self.block_ocupied_positions.append(pos_x)
         for block in self.blocks:
-            block.move_y(2)
+            block.move_y(1)
 
     def animate_mage_hands(self, interval_secs):
         reached_top = self.mage_hand1.y >= self.origin_mage_hand1_y
@@ -127,4 +127,48 @@ class Menu:
 
     def close(self):
         self.main_window.close()
+
+
+class Game:
+    def __init__(self, main_window):
+        self.main_window = main_window
+
+        self.ceu = Sprite('src/ceu.png')
+        self.chao = Sprite('src/chao2.png')
+        self.chao.y = self.main_window.height - (self.chao.height - 20)
+        self.castelo = Sprite('src/castelo.png')
+        self.castelo.x = 0
+        self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height-20))
+
+        # Preset das nuvens
+        self.nuvens = [
+            'src/nuvens/nuvem_0.png',
+            'src/nuvens/nuvem_1.png',
+            'src/nuvens/nuvem_2.png',
+            'src/nuvens/nuvem_3.png',
+            'src/nuvens/nuvem_casa.png'
+        ]
+        self.current_clouds = []
+        self.cloud_vel = -100
+        self.last_cloud_animation = time()
+
+    def animate_clouds(self, interval_secs):
+        if time() - self.last_cloud_animation <= interval_secs:
+            if len(self.current_clouds) >= 1:
+                if randint(0, 2500) == randint(0, 2500):
+                    self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
+                    self.current_clouds[-1].x = randint(self.main_window.width + self.current_clouds[-1].width, self.main_window.width + self.current_clouds[-1].width + 100)
+                    self.current_clouds[-1].y = randint(0, int(self.main_window.height / 2))
+
+                for cloud in self.current_clouds:
+                    if cloud.x < (0-cloud.width):
+                        self.current_clouds.remove(cloud)
+                    else:
+                        cloud.x += self.cloud_vel * self.main_window.delta_time()
+            else:
+                self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
+                self.current_clouds[-1].x = self.main_window.width + self.current_clouds[-1].width
+                self.current_clouds[-1].y = randint(0, int(self.main_window.height/2))
+            self.last_cloud_animation = time()
+
 
