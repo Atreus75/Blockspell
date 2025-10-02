@@ -83,4 +83,5 @@ while True:
                 cloud.draw()
         game.chao.draw()
         game.castelo.draw()
+        game.mago.draw()
         janela.update()

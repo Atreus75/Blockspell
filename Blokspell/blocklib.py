@@ -139,6 +139,9 @@ class Game:
         self.castelo = Sprite('src/castelo.png')
         self.castelo.x = 0
         self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height))
+        self.mago = Sprite('src/mago_p.png')
+        self.mago.x = (self.castelo.x + self.castelo.width - 20)
+        self.mago.y = self.main_window.height - (self.mago.height + (self.chao.height))
 
         # Preset das nuvens
         self.nuvens = [
