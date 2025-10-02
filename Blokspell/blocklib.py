@@ -135,18 +135,18 @@ class Game:
 
         self.ceu = Sprite('src/ceu.png')
         self.chao = Sprite('src/chao2.png')
-        self.chao.y = self.main_window.height - (self.chao.height - 20)
+        self.chao.y = self.main_window.height - (self.chao.height)
         self.castelo = Sprite('src/castelo.png')
         self.castelo.x = 0
-        self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height-20))
+        self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height))
 
         # Preset das nuvens
         self.nuvens = [
-            'src/nuvens/nuvem_0.png',
-            'src/nuvens/nuvem_1.png',
-            'src/nuvens/nuvem_2.png',
-            'src/nuvens/nuvem_3.png',
-            'src/nuvens/nuvem_casa.png'
+            'src/nuvem_0.png',
+            'src/nuvem_1.png',
+            'src/nuvem_2.png',
+            'src/nuvem_3.png',
+            'src/nuvem_casa.png'
         ]
         self.current_clouds = []
         self.cloud_vel = -100
@@ -157,8 +157,8 @@ class Game:
             if len(self.current_clouds) >= 1:
                 if randint(0, 2500) == randint(0, 2500):
                     self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
-                    self.current_clouds[-1].x = randint(self.main_window.width + self.current_clouds[-1].width, self.main_window.width + self.current_clouds[-1].width + 100)
-                    self.current_clouds[-1].y = randint(0, int(self.main_window.height / 2))
+                    self.current_clouds[-1].x = randint(self.main_window.width + int(self.current_clouds[-1].width), self.main_window.width + int(self.current_clouds[-1].width) + 100)
+                    self.current_clouds[-1].y = randint(0, int(self.main_window.height / 2) - int(self.current_clouds[-1].height))
 
                 for cloud in self.current_clouds:
                     if cloud.x < (0-cloud.width):
@@ -170,5 +170,3 @@ class Game:
                 self.current_clouds[-1].x = self.main_window.width + self.current_clouds[-1].width
                 self.current_clouds[-1].y = randint(0, int(self.main_window.height/2))
             self.last_cloud_animation = time()
-
-
