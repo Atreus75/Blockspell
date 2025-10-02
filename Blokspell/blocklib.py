@@ -34,6 +34,7 @@ class Menu:
 
     def preset_blocks(self):
         # Pre-configures the little blocks for their background animation
+        self.block_vely = 100
         self.blocks = [
             Sprite('src/I_azul.png'),
             Sprite('src/I_verde.png'),
@@ -102,10 +103,10 @@ class Menu:
                 while pos_x in self.block_ocupied_positions:
                     pos_x = choice(list(first_space)+list(second_space))
                 block.x = pos_x
-                block.y = randint(-10, -5) - block.height
+                block.y = randint(-30, -5) - block.height
                 self.block_ocupied_positions.append(pos_x)
         for block in self.blocks:
-            block.move_y(1)
+            block.y += self.block_vely * self.main_window.delta_time()
 
     def animate_mage_hands(self, interval_secs):
         reached_top = self.mage_hand1.y >= self.origin_mage_hand1_y
@@ -155,21 +156,20 @@ class Game:
         self.cloud_vel = -100
         self.last_cloud_animation = time()
 
-    def animate_clouds(self, interval_secs):
-        if time() - self.last_cloud_animation <= interval_secs:
-            if len(self.current_clouds) >= 1:
-                if randint(0, 2500) == randint(0, 2500):
-                    self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
-                    self.current_clouds[-1].x = randint(self.main_window.width + int(self.current_clouds[-1].width), self.main_window.width + int(self.current_clouds[-1].width) + 100)
-                    self.current_clouds[-1].y = randint(0, int(self.main_window.height / 2) - int(self.current_clouds[-1].height))
-
-                for cloud in self.current_clouds:
-                    if cloud.x < (0-cloud.width):
-                        self.current_clouds.remove(cloud)
-                    else:
-                        cloud.x += self.cloud_vel * self.main_window.delta_time()
-            else:
+    def animate_clouds(self):
+        if len(self.current_clouds) >= 1:
+            if randint(0, 1500) == randint(0, 1500):
                 self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
-                self.current_clouds[-1].x = self.main_window.width + self.current_clouds[-1].width
-                self.current_clouds[-1].y = randint(0, int(self.main_window.height/2))
-            self.last_cloud_animation = time()
+                self.current_clouds[-1].x = randint(self.main_window.width + int(self.current_clouds[-1].width), self.main_window.width + int(self.current_clouds[-1].width) + 100)
+                self.current_clouds[-1].y = randint(0, int(self.main_window.height / 2) - int(self.current_clouds[-1].height))
+
+            for cloud in self.current_clouds:
+                if cloud.x < (0-cloud.width):
+                    self.current_clouds.remove(cloud)
+                else:
+                    print(cloud.x)
+                    cloud.x += self.cloud_vel * self.main_window.delta_time()
+        else:
+            self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
+            self.current_clouds[-1].x = self.main_window.width + self.current_clouds[-1].width
+            self.current_clouds[-1].y = randint(0, int(self.main_window.height/2))

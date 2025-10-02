@@ -71,10 +71,9 @@ while True:
         janela.update()
 
     if in_game and not in_menu:
-        cloud_anim_interval = randint(5, 10)
         janela.set_background_color('black')
 
-        game.animate_clouds(cloud_anim_interval)
+        game.animate_clouds()
 
         # Draws
         game.ceu.draw()
