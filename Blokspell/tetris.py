@@ -26,6 +26,7 @@ class Tetris:
     }
 
     def __init__(self, window: Window, cols=10, rows=20, cell_size=28, top_left=(40,40)):
+        self.last_cleared_color_counts = []
         self.window = window
         self.cols = cols
         self.rows = rows
@@ -53,6 +54,22 @@ class Tetris:
         self.keyboard = self.window.get_keyboard()
 
     # ---------- Helpers ----------
+    def _count_line_color_distribution(self, row_index):
+        """
+            Retorna uma lista de contagens por cor para a linha `row_index` da grid.
+            A lista tem tamanho = len(self.COLORS). índice 0 corresponde à cor id=1.
+        """
+        counts = [0] * len(self.COLORS)
+        row = self.grid[row_index]
+        for val in row:
+            if val != 0:
+                idx = val - 1
+                if 0 <= idx < len(counts):
+                    counts[idx] += 1
+        return counts
+ 
+
+
     def _rand_piece_id(self):
         return random.randint(1, len(self.SHAPES))
 
@@ -112,34 +129,59 @@ class Tetris:
         # Antes de limpar, detecta se alguma fileira estava totalmente ocupada
         any_full_row = any(all(cell != 0 for cell in row) for row in self.grid)
         top_occupied = any(self.grid[0][c] != 0 for c in range(self.cols))
-        # Atualiza atributo pedido
         self.full_grid = any_full_row or top_occupied
 
-        # Limpa linhas completas
-        self._clear_lines()
+        # Limpa linhas completas e recupera as contagens por cor
+        cleared_info = self._clear_lines()  # retorna lista de contagens por linha
 
         # Remove referência à peça atual e tenta spawnar próxima (se não game over)
         self.current = None
+
+        # armazenamos também aqui para fácil acesso imediato
+        self.last_cleared_color_counts = cleared_info
+
         if not self.game_over:
             self.spawn_piece()
 
+        # opcional: retornar as contagens para quem chamou (útil em integrações)
+        return cleared_info
+
     def _clear_lines(self):
+        """
+        Remove linhas completas. Retorna uma lista de listas:
+        [ [counts_line0], [counts_line1], ... ]
+        Cada counts_line é uma lista de tamanho len(self.COLORS) com a contagem
+        por cor daquela linha ANTES da remoção.
+        Ordem: a lista é construída na ordem das linhas originais (top -> bottom).
+        """
+        cleared_color_counts = []
         new_grid = []
-        cleared = 0
-        for row in self.grid:
+        for row_idx, row in enumerate(self.grid):
             if all(cell != 0 for cell in row):
-                cleared += 1
+                # conta as cores antes de remover
+                counts = self._count_line_color_distribution(row_idx)
+                cleared_color_counts.append(counts)
+                # não adiciona a row ao new_grid (ou seja, ela será removida)
             else:
                 new_grid.append(row)
-        for _ in range(cleared):
-            new_grid.insert(0, [0]*self.cols)
-        if cleared:
+
+        # adiciona linhas vazias no topo pelo número de linhas removidas
+        for _ in range(len(cleared_color_counts)):
+            new_grid.insert(0, [0] * self.cols)
+
+        # se alguma foi removida, atualiza a grade
+        if cleared_color_counts:
             self.grid = new_grid
-        # Observação: após limpar, é possível que o topo tenha sido liberado.
-        # Atualiza full_grid para refletir o estado atual da grade (após clear).
+
+        # atualiza full_grid com o estado pós-clear
         any_full_row = any(all(cell != 0 for cell in row) for row in self.grid)
         top_occupied = any(self.grid[0][c] != 0 for c in range(self.cols))
         self.full_grid = any_full_row or top_occupied
+
+        # guarda o resultado para que código externo possa ler
+        self.last_cleared_color_counts = cleared_color_counts
+
+        return cleared_color_counts
 
     # ---------- API ----------
     def reset(self):
@@ -205,6 +247,14 @@ class Tetris:
                     self.current["y"] += 1
                 else:
                     self._lock_piece()
+                    if t.last_cleared_color_counts:
+                    # last_cleared_color_counts é uma lista; cada elemento é uma lista de contagens por cor
+                        for line_counts in t.last_cleared_color_counts:
+                            # line_counts[0] = quantidade de blocos da cor id=1 naquela linha,
+                            # line_counts[1] = quantidade da cor id=2, etc.
+                            print(line_counts)
+                        # reset opcional depois de tratar
+                        t.last_cleared_color_counts = []
 
     def draw(self):
         screen = self.screen
