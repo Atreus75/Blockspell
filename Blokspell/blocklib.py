@@ -5,6 +5,8 @@ from PPlay.window import *
 from PPlay.animation import *
 from random import randint, choice
 from time import time
+from tetris import Tetris
+
 
 
 class Utils:
@@ -22,12 +24,12 @@ class Utils:
             obj.draw()
 
 class Menu:
-    def __init__(self, width=0, height=0):
-        self.resolution = {'x':width, 'y':height}
-        self.main_window = Window(self.resolution['x'], self.resolution['y'])
+    def __init__(self, mouse=Mouse(), window=Window(0, 0)):
+        self.main_window = window
 
+        self.player_mouse = mouse
         self.background = GameImage('src/fundo_menu.jpg')
-        self.background.image = pygame.transform.scale(self.background.image, (self.resolution['x'], self.resolution['y']))
+        self.background.image = pygame.transform.scale(self.background.image, (self.main_window.width, self.main_window.height))
         self.background.width = self.main_window.width
         self.background.height = self.main_window.height
         self.last_window_animation = 0
@@ -56,8 +58,8 @@ class Menu:
 
         self.block_ocupied_positions = []
         for block in self.blocks:
-            block.image = pygame.transform.scale(block.image, (self.resolution['x']/100*6, self.resolution['y']/100*6))
-            block.y = self.resolution['y']
+            block.image = pygame.transform.scale(block.image, (self.main_window.width/100*6, self.main_window.height/100*6))
+            block.y = self.main_window.height
         self.last_block_renderization = time()
 
     def preset_play_btn(self):
@@ -65,14 +67,14 @@ class Menu:
         self.play_btn = GameImage('src/play_button1.png')
         self.play_btn = Utils.centralize_over_object(self.play_btn, self.main_window)
         self.play_btn.y = self.play_btn.y + 80
-        self.last_play_btn_animation = time();
+        self.last_play_btn_animation = time()
         self.play_btn.height -= self.play_btn.height/2.7
 
     def preset_mage(self):
         # Menu Mage
         self.mage_head = GameImage('src/cabeça_mago.png')
-        self.mage_head.image = pygame.transform.scale(self.mage_head.image, (self.resolution['x']/100*60, self.resolution['y']/100*80))
-        self.mage_head.x = self.resolution['x']/2 - int(self.mage_head.image.get_width()/2)
+        self.mage_head.image = pygame.transform.scale(self.mage_head.image, (self.main_window.width/100*60, self.main_window.height/100*80))
+        self.mage_head.x = self.main_window.width/2 - int(self.mage_head.image.get_width()/2)
         self.mage_head.y = 0
 
         self.mage_hand1 = GameImage('src/mao1.png')
@@ -93,12 +95,12 @@ class Menu:
         if time()-self.last_block_renderization >= interval_secs and play_pressed == False:
             self.last_block_renderization = time()
 
-            if block.y >= self.resolution['y']:    
+            if block.y >= self.main_window.height:    
                 if block.x in self.block_ocupied_positions:
                     self.block_ocupied_positions.remove(block.x)
                 
                 first_space = range(0, int(self.mage_head.x)-50)
-                second_space = range(int(self.mage_head.x+self.mage_head.width+50), int(self.resolution['x'])-int(block.width))
+                second_space = range(int(self.mage_head.x+self.mage_head.width+50), int(self.main_window.width)-int(block.width))
                 pos_x = choice(list(first_space)+list(second_space))
                 while pos_x in self.block_ocupied_positions:
                     pos_x = choice(list(first_space)+list(second_space))
@@ -126,12 +128,59 @@ class Menu:
         elif interval_secs == -1:
             self.play_btn.x = self.play_btn.x if self.play_btn.x > 0 else self.play_btn.x * -1
 
-    def close(self):
-        self.main_window.close()
+    def menu_loop(self):
+        # Menu Definitions
+        play_pressed = False
+        wait_blocks = 0
+        mage_anim_interval = 0.05
+        blocks_anim_interval = 0.05
+
+        self.preset_blocks()
+        self.preset_play_btn()
+        self.preset_mage()
+        
+        # Loop
+        while True:
+            # Verifications
+            if self.main_window.get_keyboard().key_pressed('ESC'):
+                self.main_window.close()
+                exit() # End window and the entire program
+            
+            now = time()
+            if play_pressed and now - wait_blocks >= 5:
+                break # End menu loop and goes to game loop
+
+            if self.player_mouse.is_over_object(self.play_btn):
+                mage_anim_interval = 0.005
+                
+                if self.player_mouse.is_button_pressed(1):
+                    self.mage_hand1.y = self.origin_mage_hand1_y
+                    self.mage_hand2.y = self.origin_mage_hand2_y
+                    #play_sound.play()
+                    wait_blocks = time()
+                    play_pressed = True
+            else:
+                if not self.player_mouse.is_button_pressed(1):
+                    mage_anim_interval = 0.05
+
+            # Animations
+            self.animate_falling_blocks(blocks_anim_interval)
+            if not play_pressed:
+                self.animate_mage_hands(mage_anim_interval)
+
+            # Draws in visual layer order (back to front)
+            self.background.draw()
+            
+            # Draws all blocks
+            for block in self.blocks:
+                block.draw()
+
+            Utils.draw_all([self.play_btn, self.mage_head, self.mage_hand1, self.mage_hand2])
+            self.main_window.update()
 
 
 class Game:
-    def __init__(self, main_window):
+    def __init__(self, main_window=Window(0, 0)):
         self.main_window = main_window
 
         self.ceu = Sprite('src/ceu.png')
@@ -144,8 +193,10 @@ class Game:
         self.mago.x = (self.castelo.x + self.castelo.width - 20)
         self.mago.y = self.main_window.height - (self.mago.height + (self.chao.height))
 
-        # Preset das nuvens
-        self.nuvens = [
+        self.tetris = Tetris(self.main_window, 10, 15, 28, (self.main_window.width//2 - 190, self.main_window.height//2 - 300))
+
+        # Preset das clouds
+        self.clouds = [
             'src/nuvem_0.png',
             'src/nuvem_1.png',
             'src/nuvem_2.png',
@@ -159,7 +210,7 @@ class Game:
     def animate_clouds(self):
         if len(self.current_clouds) >= 1:
             if randint(0, 1500) == randint(0, 1500):
-                self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
+                self.current_clouds.append(Sprite(choice(self.clouds[0:4])))
                 self.current_clouds[-1].x = randint(self.main_window.width + int(self.current_clouds[-1].width), self.main_window.width + int(self.current_clouds[-1].width) + 100)
                 self.current_clouds[-1].y = randint(0, int(self.main_window.height / 2) - int(self.current_clouds[-1].height))
 
@@ -167,9 +218,34 @@ class Game:
                 if cloud.x < (0-cloud.width):
                     self.current_clouds.remove(cloud)
                 else:
-                    print(cloud.x)
                     cloud.x += self.cloud_vel * self.main_window.delta_time()
         else:
-            self.current_clouds.append(Sprite(choice(self.nuvens[0:4])))
+            self.current_clouds.append(Sprite(choice(self.clouds[0:4])))
             self.current_clouds[-1].x = self.main_window.width + self.current_clouds[-1].width
             self.current_clouds[-1].y = randint(0, int(self.main_window.height/2))
+    
+    def game_loop(self):
+        while True:
+            # Checks
+            if self.main_window.get_keyboard().key_pressed('ESC'):
+                break
+            
+            if self.tetris.game_over:
+                self.tetris.reset()
+            
+            self.main_window.set_background_color('black')
+            self.animate_clouds()
+
+            # Draws
+            self.ceu.draw()
+            if len(self.current_clouds) >= 1:
+                for cloud in self.current_clouds:
+                    cloud.draw()
+            self.chao.draw()
+            self.castelo.draw()
+            self.mago.draw()
+            self.tetris.draw()
+            self.main_window.update()
+            self.tetris.update()
+
+
