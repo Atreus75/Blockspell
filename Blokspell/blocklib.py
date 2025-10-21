@@ -28,7 +28,7 @@ class Menu:
         self.main_window = window
 
         self.player_mouse = mouse
-        self.background = GameImage('src/fundo_menu.jpg')
+        self.background = GameImage('src/menu/fundo_menu.jpg')
         self.background.image = pygame.transform.scale(self.background.image, (self.main_window.width, self.main_window.height))
         self.background.width = self.main_window.width
         self.background.height = self.main_window.height
@@ -38,22 +38,22 @@ class Menu:
         # Pre-configures the little blocks for their background animation
         self.block_vely = 100
         self.blocks = [
-            Sprite('src/I_azul.png'),
-            Sprite('src/I_verde.png'),
-            Sprite('src/I_vermelha.png'),
-            Sprite('src/L_azul.png'),
-            Sprite('src/L_verde.png'),
-            Sprite('src/L_vermelho.png'),
-            Sprite('src/O_azul.png'),
-            Sprite('src/O_verde.png'),
-            Sprite('src/O_vermelho.png'),
-            Sprite('src/peça_dourada.png'),
-            Sprite('src/S_azul.png'),
-            Sprite('src/S_verde.png'),
-            Sprite('src/S_vermelho.png'),
-            Sprite('src/T_azul.png'),
-            Sprite('src/T_verde.png'),
-            Sprite('src/T_vermelho.png')
+            Sprite('src/peças/I_azul.png'),
+            Sprite('src/peças/I_verde.png'),
+            Sprite('src/peças/I_vermelha.png'),
+            Sprite('src/peças/L_azul.png'),
+            Sprite('src/peças/L_verde.png'),
+            Sprite('src/peças/L_vermelho.png'),
+            Sprite('src/peças/O_azul.png'),
+            Sprite('src/peças/O_verde.png'),
+            Sprite('src/peças/O_vermelho.png'),
+            Sprite('src/peças/peça_dourada.png'),
+            Sprite('src/peças/S_azul.png'),
+            Sprite('src/peças/S_verde.png'),
+            Sprite('src/peças/S_vermelho.png'),
+            Sprite('src/peças/T_azul.png'),
+            Sprite('src/peças/T_verde.png'),
+            Sprite('src/peças/T_vermelho.png')
                 ]
 
         self.block_ocupied_positions = []
@@ -64,7 +64,7 @@ class Menu:
 
     def preset_play_btn(self):
         # Play button configuration
-        self.play_btn = GameImage('src/play_button1.png')
+        self.play_btn = GameImage('src/menu/play_button1.png')
         self.play_btn = Utils.centralize_over_object(self.play_btn, self.main_window)
         self.play_btn.y = self.play_btn.y + 80
         self.last_play_btn_animation = time()
@@ -72,16 +72,16 @@ class Menu:
 
     def preset_mage(self):
         # Menu Mage
-        self.mage_head = GameImage('src/cabeça_mago.png')
+        self.mage_head = GameImage('src/menu/cabeça_mago.png')
         self.mage_head.image = pygame.transform.scale(self.mage_head.image, (self.main_window.width/100*60, self.main_window.height/100*80))
         self.mage_head.x = self.main_window.width/2 - int(self.mage_head.image.get_width()/2)
         self.mage_head.y = 0
 
-        self.mage_hand1 = GameImage('src/mao1.png')
+        self.mage_hand1 = GameImage('src/menu/mao1.png')
         self.mage_hand1.x = self.play_btn.x - int(self.play_btn.width)/2 + 75
         self.mage_hand1.y = self.play_btn.y - (int(self.play_btn.height) - 30)
 
-        self.mage_hand2 = GameImage('src/mao2.png')
+        self.mage_hand2 = GameImage('src/menu/mao2.png')
         self.mage_hand2.x = self.mage_hand1.x - 55
         self.mage_hand2.y = self.mage_hand1.y - 15
         
@@ -183,13 +183,13 @@ class Game:
     def __init__(self, main_window=Window(0, 0)):
         self.main_window = main_window
 
-        self.ceu = Sprite('src/ceu.png')
-        self.chao = Sprite('src/chao2.png')
+        self.ceu = Sprite('src/cenario/ceu.png')
+        self.chao = Sprite('src/cenario/chao2.png')
         self.chao.y = self.main_window.height - (self.chao.height)
-        self.castelo = Sprite('src/castelo.png')
+        self.castelo = Sprite('src/cenario/castelo.png')
         self.castelo.x = 0
         self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height))
-        self.mago = Sprite('src/mago_p.png')
+        self.mago = Sprite('src/magos/mago_p.png')
         self.mago.x = (self.castelo.x + self.castelo.width - 20)
         self.mago.y = self.main_window.height - (self.mago.height + (self.chao.height))
 
@@ -197,11 +197,11 @@ class Game:
 
         # Preset das clouds
         self.clouds = [
-            'src/nuvem_0.png',
-            'src/nuvem_1.png',
-            'src/nuvem_2.png',
-            'src/nuvem_3.png',
-            'src/nuvem_casa.png'
+            'src/nuvens/nuvem_0.png',
+            'src/nuvens/nuvem_1.png',
+            'src/nuvens/nuvem_2.png',
+            'src/nuvens/nuvem_3.png',
+            'src/nuvens/nuvem_casa.png'
         ]
         self.current_clouds = []
         self.cloud_vel = -100
@@ -247,5 +247,3 @@ class Game:
             self.tetris.draw()
             self.main_window.update()
             self.tetris.update()
-
-
