@@ -8,7 +8,6 @@ from time import time
 from tetris import Tetris
 
 
-
 class Utils:
     def __init__(self):
         pass
@@ -22,6 +21,67 @@ class Utils:
     def draw_all(objects=[]):
         for obj in objects:
             obj.draw()
+
+class Enemie(Animation):
+    def __init__(self, image_file, frames=1, move_timeout=0, damage=0, life=0, vel_x=0):
+        super().__init__(image_file, frames)
+        self.set_total_duration(1000)
+        self.move_timeout = move_timeout
+        self.damage = damage
+        self.life = life
+        self.vel_x = vel_x
+        self.last_move = time()
+        self.alive = True
+
+    def move(self):
+        self.x -= self.vel_x
+
+
+class Cachorro(Enemie):
+    def __init__(self):
+        image_file = 'src/inimigos/cachorro_spritesheet.png'
+        super().__init__(image_file, frames=12, move_timeout=3, damage=20, life=100, vel_x=25)
+
+class Gorila(Enemie):
+    def __init__(self):
+        image_file = 'src/inimigos/gorila_spritesheet.png'
+        super().__init__(image_file, frames=6, move_timeout=5, damage=50, life=200, vel_x=10)
+
+class Rato(Enemie):
+    def __init__(self):
+        image_file = 'src/inimigos/rato_spritesheet.png'
+        super().__init__(image_file, frames=3, move_timeout=1, damage=5, life=50, vel_x=40)
+
+class Mago(Sprite):
+    def __init__(self, image_file, frames=1):
+        super().__init__(image_file, frames)
+        self.life = 100
+        self.mana = 100
+    
+    def regenerate_life(self, points=0):
+        self.life += 10 * points
+        
+    def regenerate_mana(self, points=0):
+        self.mana += 10 * points
+    
+class Spell(Sprite):
+    def __init__(self):
+        self.current_frame = 0
+        self.current_collision_frame = 0
+        self.image_path = 'src/bola_fodona/bola_0.png'
+        super().__init__(self.image_path)
+        self.damage = 25
+        self.last_animation = time()
+        self.last_collision_animation = 0
+        self.animation_timeout = 0.2
+        #self.set_total_duration(1000)
+
+
+class Regeneration(Sprite):
+    def __init__(self):
+        super().__init__('/src/açoes/rec_vida.png')
+        self.life_points = 5
+        self.animation_duration = 1
 
 class Menu:
     def __init__(self, mouse=Mouse(), window=Window(0, 0)):
@@ -182,6 +242,8 @@ class Menu:
 class Game:
     def __init__(self, main_window=Window(0, 0)):
         self.main_window = main_window
+        self.esc_pressed = 0
+        self.enemie_generation_rate = 20
 
         self.ceu = Sprite('src/cenario/ceu.png')
         self.chao = Sprite('src/cenario/chao2.png')
@@ -189,7 +251,7 @@ class Game:
         self.castelo = Sprite('src/cenario/castelo.png')
         self.castelo.x = 0
         self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height))
-        self.mago = Sprite('src/magos/mago_p.png')
+        self.mago = Mago('src/magos/mago_p.png')
         self.mago.x = (self.castelo.x + self.castelo.width - 20)
         self.mago.y = self.main_window.height - (self.mago.height + (self.chao.height))
 
@@ -203,9 +265,16 @@ class Game:
             'src/nuvens/nuvem_3.png',
             'src/nuvens/nuvem_casa.png'
         ]
+        
         self.current_clouds = []
         self.cloud_vel = -100
         self.last_cloud_animation = time()
+        
+        self.current_enemies = []
+        self.last_enemie_generation = time()
+
+        self.current_spells = []
+        self.spell_velx = 100
 
     def animate_clouds(self):
         if len(self.current_clouds) >= 1:
@@ -223,19 +292,99 @@ class Game:
             self.current_clouds.append(Sprite(choice(self.clouds[0:4])))
             self.current_clouds[-1].x = self.main_window.width + self.current_clouds[-1].width
             self.current_clouds[-1].y = randint(0, int(self.main_window.height/2))
+    # tetris_pplay.py
+
+    def generate_enemies(self):
+        if time() - self.last_enemie_generation >= self.enemie_generation_rate or len(self.current_enemies) == 0:
+            self.last_enemie_generation = time()
+            
+            choose = randint(1, 20)
+            if 0 <= choose <= 9:
+                self.current_enemies.append(Cachorro())
+            elif 10 <= choose <= 13:
+                self.current_enemies.append(Gorila())
+            elif 14 <= choose <= 19:
+                self.current_enemies.append(Rato())
+            else:
+                self.current_enemies.append(Cachorro())
+            
+            self.current_enemies[-1].x = self.main_window.width
+            self.current_enemies[-1].y = self.chao.y - self.current_enemies[-1].height
+    
+    def launch_spell(self, count=1):
+        spell = Spell()
+        spell.damage *= count
+        self.current_spells.append(spell)
+    
+    def animate_spell(self, spell=Spell()):
+        possible_spell_sprites = [
+            'src/bola_fodona/bola_0.png',
+            'src/bola_fodona/Bola_1.png',
+            'src/bola_fodona/Bola_2.png',
+            'src/bola_fodona/Bola_3.png',
+            'src/bola_fodona/Bola_4.png'
+        ]
+
+        spell.x += self.spell_velx * self.main_window.delta_time()
+        
+        if time() - spell.last_animation >= spell.animation_timeout:
+            spell.last_animation = time()
+            if spell.current_frame == 4:
+                spell.current_frame = 0
+            else:
+                spell.current_frame += 1
+            
+            spell.image = pygame.image.load(possible_spell_sprites[spell.current_frame])
+            spell.width = spell.image.get_width()
+            spell.height = spell.image.get_height()
+            spell.rect = spell.image.get_rect()
+            
+        spell.draw()
+    
+    def animate_spell_collision(self, spell=Spell()):
+        possible_collision_sprites = [
+            'src/bola_fodona/Bola_5.png',
+            'src/bola_fodona/Bola_6.png',
+            'src/bola_fodona/Bola_7.png'
+        ]
+        
+        if time()-spell.last_collision_animation >= spell.animation_timeout+0.3:
+            spell.last_animation = time()
+            spell.image = pygame.image.load(possible_collision_sprites[spell.current_collision_frame])
+            spell.width = spell.image.get_width()
+            spell.height = spell.image.get_height()
+            spell.rect = spell.image.get_rect()
+            spell.current_collision_frame += 1
     
     def game_loop(self):
         while True:
+            self.main_window.set_background_color('black')
+            
             # Checks
             if self.main_window.get_keyboard().key_pressed('ESC'):
+                self.esc_pressed = time()
                 break
             
+            # Functions
             if self.tetris.game_over:
                 self.tetris.reset()
-            
-            self.main_window.set_background_color('black')
             self.animate_clouds()
-
+            self.generate_enemies()
+            # Mage actions
+            if len(self.tetris.last_cleared_color_counts) >= 1:
+                counts = self.tetris.last_cleared_color_counts[0]
+                
+                for i in range(1, 9):
+                    if i == 1 or i == 5:
+                        self.launch_spell(counts[i])
+                        self.current_spells[-1].y = self.mago.y + self.current_spells[-1].height
+                        self.current_spells[-1].x = self.mago.x + self.mago.width
+                    elif i == 2 or i == 6:
+                        self.mago.regenerate_life(counts[i])
+                    elif i == 3 or i == 7:
+                        self.mago.regenerate_mana(counts[i])
+                self.tetris.last_cleared_color_counts.pop()
+            
             # Draws
             self.ceu.draw()
             if len(self.current_clouds) >= 1:
@@ -244,6 +393,34 @@ class Game:
             self.chao.draw()
             self.castelo.draw()
             self.mago.draw()
+            for enemie in self.current_enemies:
+                if enemie.life <= 0:
+                    enemie.alive = False
+                    self.current_enemies.remove(enemie)
+                
+                if time() - enemie.last_move >= enemie.move_timeout and enemie.alive:
+                    enemie.last_move = time()
+                    if enemie.x >= self.mago.x + self.mago.width:
+                        enemie.move()
+
+
+                enemie.update()
+                enemie.draw()
+
+            
+            if len(self.current_spells) >= 1:
+                for spell in self.current_spells:
+                    if spell.x >= self.main_window.width:
+                        self.current_spells.remove(spell)
+                    else:
+                        self.animate_spell(spell)
+                        for spell in self.current_spells:
+                            for enemie in self.current_enemies:
+                                if spell.collided_perfect(enemie) and spell.current_collision_frame <= 2:
+                                    self.animate_spell_collision(spell)
+                                elif spell.current_collision_frame > 2 and spell in self.current_spells:
+                                    self.current_spells.remove(spell)
+                    
             self.tetris.draw()
             self.main_window.update()
             self.tetris.update()

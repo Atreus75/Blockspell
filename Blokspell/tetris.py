@@ -16,13 +16,14 @@ class Tetris:
     ]
 
     COLORS = {
-        1: (0, 255, 255),   # I
-        2: (0, 0, 255),     # J
-        3: (255, 165, 0),   # L
-        4: (255, 255, 0),   # O
-        5: (0, 255, 0),     # S
-        6: (128, 0, 128),   # T
-        7: (255, 0, 0)      # Z
+        1: (232, 31, 16),   # Red
+        2: (43, 227, 36),   # Green 
+        3: (45, 42, 245),   # Blue
+        4: (245, 238, 42),  # Yellow
+        5: (232, 31, 16),   # Red
+        6: (43, 227, 36),   # Green 
+        7: (45, 42, 245),   # Blue
+        8: (245, 238, 42)   # Yellow
     }
 
     def __init__(self, window: Window, cols=10, rows=20, cell_size=28, top_left=(40,40)):
@@ -45,9 +46,7 @@ class Tetris:
         self.move_timer = 0.0
 
         self.game_over = False
-        # Novo atributo pedido:
-        # True se alguma fileira estiver totalmente ocupada OU se o topo (linha 0) tiver qualquer bloco.
-        # (Útil para detectar condições críticas / game over)
+        
         self.full_grid = False
 
         self.screen = self.window.get_screen()
@@ -247,14 +246,6 @@ class Tetris:
                     self.current["y"] += 1
                 else:
                     self._lock_piece()
-                    if t.last_cleared_color_counts:
-                    # last_cleared_color_counts é uma lista; cada elemento é uma lista de contagens por cor
-                        for line_counts in t.last_cleared_color_counts:
-                            # line_counts[0] = quantidade de blocos da cor id=1 naquela linha,
-                            # line_counts[1] = quantidade da cor id=2, etc.
-                            print(line_counts)
-                        # reset opcional depois de tratar
-                        t.last_cleared_color_counts = []
 
     def draw(self):
         screen = self.screen
