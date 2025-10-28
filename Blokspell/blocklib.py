@@ -355,16 +355,58 @@ class Game:
             spell.height = spell.image.get_height()
             spell.rect = spell.image.get_rect()
             spell.current_collision_frame += 1
-    
+
+    def pause_menu(self):
+
+        mouse = self.main_window.get_mouse()
+
+        # --- Carrega imagens ---
+        fundo = GameImage("src/menu/fundo_menu.jpg")
+        fundo.image = pygame.transform.scale(
+            fundo.image, (self.main_window.width, self.main_window.height)
+        )
+
+        btn_continuar = GameImage("src/menu/play.png")
+        btn_menu = GameImage("src/menu/sair.png")
+
+        # Centraliza os botões
+        btn_continuar.x = self.main_window.width / 2 - btn_continuar.width / 2
+        btn_menu.x = self.main_window.width / 2 - btn_menu.width / 2
+        btn_continuar.y = self.main_window.height / 2 - 80
+        btn_menu.y = self.main_window.height / 2 + 20
+
+        while True:
+            fundo.draw()
+            btn_continuar.draw()
+            btn_menu.draw()
+
+            self.main_window.draw_text("PAUSADO", self.main_window.width / 2 - 100, 100, 50, (255, 255, 255))
+
+            if mouse.is_over_object(btn_continuar):
+                if mouse.is_button_pressed(1):
+                    pygame.time.wait(150)
+                    return "continuar"
+
+            if mouse.is_over_object(btn_menu):
+                if mouse.is_button_pressed(1):
+                    pygame.time.wait(150)
+                    return "menu"
+
+            self.main_window.update()
+
     def game_loop(self):
         while True:
             self.main_window.set_background_color('black')
-            
-            # Checks
-            if self.main_window.get_keyboard().key_pressed('ESC'):
-                self.esc_pressed = time()
-                break
-            
+            kb = self.main_window.get_keyboard()
+
+            # --- pausa ---
+            if kb.key_pressed('ESC'):
+                pygame.time.wait(150)
+                resultado = self.pause_menu()
+                if resultado == "menu":
+                    self.esc_pressed = time()
+                    break
+
             # Functions
             if self.tetris.game_over:
                 self.tetris.reset()

@@ -52,6 +52,8 @@ class Tetris:
         self.screen = self.window.get_screen()
         self.keyboard = self.window.get_keyboard()
 
+        self.space_was_pressed = False
+
     # ---------- Helpers ----------
     def _count_line_color_distribution(self, row_index):
         """
@@ -217,11 +219,14 @@ class Tetris:
             self.move_timer = 0.0
 
         # hard drop
-        if kb.key_pressed("space"):
+        if kb.key_pressed("space") and not self.space_was_pressed:
             if self.current:
                 while self._can_place(self.current["matrix"], self.current["x"], self.current["y"] + 1):
                     self.current["y"] += 1
                 self._lock_piece()
+            self.space_was_pressed = True
+        elif not kb.key_pressed("space"):
+            self.space_was_pressed = False
 
     def update(self):
         if self.game_over:

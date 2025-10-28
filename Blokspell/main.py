@@ -14,19 +14,20 @@ main_window.set_title('Blockspell')
 # Menu Definitions
 menu = Menu(player_mouse, main_window)
 menu.main_window.set_resolution(10, 10)
+menu.menu_loop()
 
 # Game definitions
 game = Game(main_window)
-entered_game = False
+game.game_loop()
 
 # Main Loop
 while True:
-    if entered_game and time() - game.esc_pressed >= 1:
-        menu = Menu(player_mouse, main_window)
-        menu.main_window.set_resolution(10, 10)
-        entered_game = False
-    elif not entered_game:
-        menu.menu_loop()
-        game.game_loop()
-        entered_game = True
+    # --- MENU PRINCIPAL ---
+    menu = Menu(player_mouse, main_window)
+    menu.main_window.set_resolution(10, 10)
+    menu.menu_loop()
+
+    # --- INICIA UMA NOVA PARTIDA ---
+    game = Game(main_window)
+    game.game_loop()
 
