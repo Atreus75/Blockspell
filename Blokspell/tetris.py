@@ -55,6 +55,60 @@ class Tetris:
         self.space_was_pressed = False
 
     # ---------- Helpers ----------
+    def _count_line_color_distribution_dict(self, row_index):
+        """
+        Conta por ID na linha `row_index` e retorna dicionário:
+        { "red": n, "green": n, "blue": n, "yellow": n }
+        Compatível com duas possibilidades de mapeamento:
+        - se self.COLORS tem 4 entradas (1..4) -> map 1->red,2->green,3->blue,4->yellow
+        - se self.COLORS tem >=8 entries (repetições) -> map 1&5->red, 2&6->green, 3&7->blue, 4&8->yellow
+        """
+        # conta por id (1-based)
+        max_id = max((cell for cell in self.grid[row_index]), default=0)
+        # make sure we have at least list of zeros for indices
+        # build simple id counts
+        id_counts = {}
+        for val in self.grid[row_index]:
+            if val and val > 0:
+                id_counts[val] = id_counts.get(val, 0) + 1
+
+        # aggregate into semantic buckets
+        red = green = blue = yellow = 0
+
+        # If COLORS length >= 8 we assume repetition pattern 1->red,2->green,3->blue,4->yellow,5->red...
+        if len(self.COLORS) >= 8:
+            for id_key, cnt in id_counts.items():
+                mod = (id_key - 1) % 4  # 0..3 -> red,green,blue,yellow
+                if mod == 0:
+                    red += cnt
+                elif mod == 1:
+                    green += cnt
+                elif mod == 2:
+                    blue += cnt
+                elif mod == 3:
+                    yellow += cnt
+        else:
+            # fallback: first four IDs map in order red,green,blue,yellow
+            for id_key, cnt in id_counts.items():
+                if id_key == 1:
+                    red += cnt
+                elif id_key == 2:
+                    green += cnt
+                elif id_key == 3:
+                    blue += cnt
+                elif id_key == 4:
+                    yellow += cnt
+                else:
+                    # any unexpected id -> fold into closest (safe fallback)
+                    fold = (id_key - 1) % 4
+                    if fold == 0: red += cnt
+                    elif fold == 1: green += cnt
+                    elif fold == 2: blue += cnt
+                    elif fold == 3: yellow += cnt
+
+        return {"red": red, "green": green, "blue": blue, "yellow": yellow}
+    
+    
     def _count_line_color_distribution(self, row_index):
         """
             Retorna uma lista de contagens por cor para a linha `row_index` da grid.
@@ -149,40 +203,36 @@ class Tetris:
 
     def _clear_lines(self):
         """
-        Remove linhas completas. Retorna uma lista de listas:
-        [ [counts_line0], [counts_line1], ... ]
-        Cada counts_line é uma lista de tamanho len(self.COLORS) com a contagem
-        por cor daquela linha ANTES da remoção.
-        Ordem: a lista é construída na ordem das linhas originais (top -> bottom).
+        Remove linhas completas. Retorna lista de dicionários:
+        [ {"red":..,"green":..,"blue":..,"yellow":..}, ... ]
+        E preenche self.last_cleared_color_counts com essa lista.
         """
-        cleared_color_counts = []
+        cleared_info = []
         new_grid = []
         for row_idx, row in enumerate(self.grid):
             if all(cell != 0 for cell in row):
-                # conta as cores antes de remover
-                counts = self._count_line_color_distribution(row_idx)
-                cleared_color_counts.append(counts)
-                # não adiciona a row ao new_grid (ou seja, ela será removida)
+                # conta por cor semanticamente antes de remover
+                counts_dict = self._count_line_color_distribution_dict(row_idx)
+                cleared_info.append(counts_dict)
+                # não adiciona a row -> efetivamente remove
             else:
                 new_grid.append(row)
 
-        # adiciona linhas vazias no topo pelo número de linhas removidas
-        for _ in range(len(cleared_color_counts)):
+        # adiciona linhas vazias no topo pelo número de removidas
+        for _ in range(len(cleared_info)):
             new_grid.insert(0, [0] * self.cols)
 
-        # se alguma foi removida, atualiza a grade
-        if cleared_color_counts:
+        if cleared_info:
             self.grid = new_grid
 
-        # atualiza full_grid com o estado pós-clear
+        # atualiza full_grid pós clear
         any_full_row = any(all(cell != 0 for cell in row) for row in self.grid)
         top_occupied = any(self.grid[0][c] != 0 for c in range(self.cols))
         self.full_grid = any_full_row or top_occupied
 
-        # guarda o resultado para que código externo possa ler
-        self.last_cleared_color_counts = cleared_color_counts
-
-        return cleared_color_counts
+        # guarda resultado
+        self.last_cleared_color_counts = cleared_info
+        return cleared_info
 
     # ---------- API ----------
     def reset(self):
