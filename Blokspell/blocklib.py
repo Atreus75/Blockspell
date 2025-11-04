@@ -38,7 +38,6 @@ class Enemie(Animation):
     def move(self):
         self.x -= self.vel_x
 
-
 class Cachorro(Enemie):
     def __init__(self):
         image_file = 'src/inimigos/cachorro_spritesheet.png'
@@ -257,6 +256,7 @@ class Game:
         self.esc_pressed = 0
         self.enemie_generation_rate = 20
         self.enemie_limit = 4
+        self.score = 0
 
         self.ceu = Sprite('src/cenario/ceu.png')
         self.chao = Sprite('src/cenario/chao2.png')
@@ -288,6 +288,9 @@ class Game:
         self.current_spells = []
         self.spell_velx = 200
         self._load_spell_assets()
+
+    def placar(self):
+        self.main_window.draw_text(f"Score: {self.score}", 10, 40, size=25, color=(255, 255, 255))
 
     def _load_spell_assets(self):
         """Carrega todas as imagens do feitiço na memória para evitar lag."""
@@ -396,6 +399,8 @@ class Game:
                         spell.collided_with = enemy
                         spell.last_collision_animation = time()
                         enemy.life -= spell.damage
+                        if enemy.life <= 0:
+                            self.score += 100 if isinstance(enemy, Rato) else 200 if isinstance(enemy, Cachorro) else 300
                         spell.damage -= enemy.life
                         break
 
@@ -574,6 +579,7 @@ class Game:
             life_color = (0, 245, 0) if self.mago.life >= 70 else (231, 245, 0) if 50 <= self.mago.life < 70 else (255, 0, 0)
             self.castelo.draw()
             self.mago.draw()
+            self.placar()
             self.tetris.draw()
             self.animate_enemies()
             self.update_spells()
