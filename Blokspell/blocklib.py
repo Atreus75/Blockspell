@@ -366,9 +366,9 @@ class Game:
                 e.last_attack = time()
                 e.alive = True
                 self.enemy_slots[i] = e
-    
+
     def launch_spell(self, power=1):
-        """Cria e adiciona um novo feitiço ofensivo na lista atual."""
+        """Cria e adiciona um novo feitiço ofensivo escalonado visualmente pelo dano."""
         x = self.mago.x + self.mago.width - 20
         y = self.mago.y + self.mago.height // 3
 
@@ -379,9 +379,23 @@ class Game:
         spell.last_animation = time()
         spell.last_collision_animation = 0
         spell.animation_timeout = 0.08
-        spell.damage = 10 * power  # dano baseado na força
+        spell.damage = 10 * power  # dano proporcional à força
 
-        print(f'Spell launched with {power} points of power.')
+        # --- Escala visual conforme dano ---
+        scale = 1.0 + (spell.damage / 100)
+        if scale > 1.8:
+            scale = 1.8
+        elif scale < 1.0:
+            scale = 1.0
+
+        w = int(spell.width * scale)
+        h = int(spell.height * scale)
+        spell.image = pygame.transform.scale(spell.image, (w, h))
+        spell.width = w
+        spell.height = h
+        spell.rect = spell.image.get_rect(topleft=(spell.x, spell.y))
+
+        print(f'Spell lançado com dano {spell.damage} (escala {scale:.2f}x)')
         self.current_spells.append(spell)
 
 
