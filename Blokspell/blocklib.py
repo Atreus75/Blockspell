@@ -6,7 +6,7 @@ from PPlay.animation import *
 from random import randint, choice
 from time import time
 from tetris import Tetris
-
+from math import sin
 
 class Utils:
     def __init__(self):
@@ -34,6 +34,11 @@ class Enemie(Animation):
         self.last_attack = 0
         self.attack_cooldown = attack_cooldown
         self.alive = True
+        self.state = "walking"  # walking / attacking / recovering
+        self.attack_offset = 0  # deslocamento momentâneo no ataque
+        self.attack_recoil = 6  # quão forte a sacudida é
+        self.recover_time = 0.15  # tempo pra voltar da sacudida
+        self.image_file = image_file
 
     def move(self):
         self.x -= self.vel_x
@@ -252,6 +257,8 @@ class Menu:
 
 class Game:
     def __init__(self, main_window=Window(0, 0)):
+
+
         self.main_window = main_window
         self.esc_pressed = 0
         self.enemie_generation_rate = 20
@@ -281,9 +288,17 @@ class Game:
         self.current_clouds = []
         self.cloud_vel = -100
         self.last_cloud_animation = time()
-        
-        self.current_enemies = []
-        self.last_enemie_generation = time()
+
+        self.enemy_slots = [None, None, None]  # 3 posições fixas
+        self.slot_positions = [
+            self.mago.x + 300,  # Posição mais próxima
+            self.mago.x + 450,  # Posição intermediária
+            self.mago.x + 600  # Posição mais distante
+        ]
+        self.slot_damage_multiplier = [1.0, 0.7, 0.4]  # Dano reduzido conforme distância
+        self.last_enemy_gen = time()
+
+
 
         self.current_spells = []
         self.spell_velx = 200
@@ -319,21 +334,38 @@ class Game:
     # tetris_pplay.py
 
     def generate_enemies(self):
-        if (time() - self.last_enemie_generation >= self.enemie_generation_rate or len(self.current_enemies) == 0) and len(self.current_enemies) <= self.enemie_limit:
-            self.last_enemie_generation = time()
-            
-            choose = randint(1, 20)
-            if 0 <= choose <= 9:
-                self.current_enemies.append(Cachorro())
-            elif 10 <= choose <= 13:
-                self.current_enemies.append(Gorila())
-            elif 14 <= choose <= 19:
-                self.current_enemies.append(Rato())
-            else:
-                self.current_enemies.append(Cachorro())
-            
-            self.current_enemies[-1].x = self.main_window.width
-            self.current_enemies[-1].y = self.chao.y - self.current_enemies[-1].height
+        """Garante até 3 inimigos ativos, preenchendo slots vazios com novos que caminham até o destino."""
+        # Remove mortos
+        for i in range(3):
+            e = self.enemy_slots[i]
+            if e and not e.alive:
+                self.enemy_slots[i] = None
+
+        # Avança inimigos para frente se houver buracos
+        for i in range(2):
+            if self.enemy_slots[i] is None and self.enemy_slots[i + 1]:
+                self.enemy_slots[i] = self.enemy_slots[i + 1]
+                self.enemy_slots[i + 1] = None
+                self.enemy_slots[i].target_slot = i
+
+        # Gera novos inimigos no slot mais distante vazio
+        for i in range(2, -1, -1):
+            if self.enemy_slots[i] is None:
+                choose = randint(0, 19)
+                if 0 <= choose <= 9:
+                    e = Cachorro()
+                elif 10 <= choose <= 13:
+                    e = Gorila()
+                else:
+                    e = Rato()
+
+                # nasce fora da tela à direita
+                e.x = self.main_window.width + randint(20, 100)
+                e.y = self.chao.y - e.height
+                e.target_slot = i
+                e.last_attack = time()
+                e.alive = True
+                self.enemy_slots[i] = e
     
     def launch_spell(self, power=1):
         """Cria e adiciona um novo feitiço ofensivo na lista atual."""
@@ -392,17 +424,21 @@ class Game:
                     spell.rect = spell.image.get_rect(topleft=(spell.x, spell.y))
 
                 # colisão com inimigos
-                for enemy in self.current_enemies:
+                for enemy in self.enemy_slots:
+                    if not enemy:
+                        continue  # slot vazio
                     if spell.collided(enemy):
-                        if enemy.life - spell.damage >= 0: # Só inicia animação de colisão se dano for exatamente ou não-suficiente para matar inimigo
-                            spell.state = "colliding"
+                        spell.state = "colliding"
                         spell.collided_with = enemy
                         spell.last_collision_animation = time()
                         enemy.life -= spell.damage
+
+                        # inimigo morre?
                         if enemy.life <= 0:
+                            enemy.alive = False
                             self.score += 100 if isinstance(enemy, Rato) else 200 if isinstance(enemy, Cachorro) else 300
-                        spell.damage -= enemy.life
-                        break
+
+                        break  # evita múltiplas colisões no mesmo frame
 
                 # saiu da tela
                 if spell.x > self.main_window.width:
@@ -472,21 +508,57 @@ class Game:
             self.main_window.update()
 
     def animate_enemies(self):
-        for enemie in self.current_enemies:
-            if enemie.life <= 0:
-                enemie.alive = False
-                self.current_enemies.remove(enemie)
-            
-            if time() - enemie.last_move >= enemie.move_timeout and enemie.alive:
-                enemie.last_move = time()
-                if enemie.x >= self.mago.x + self.mago.width:
-                    enemie.update()
-                    enemie.move()
-                else:
-                    if time() - enemie.last_attack >= enemie.attack_cooldown:
-                        self.mago.life -= enemie.damage
+        """Atualiza movimento, ataques e animações dos inimigos por slot."""
+        for i, e in enumerate(self.enemy_slots):
+            if not e:
+                continue
 
-            enemie.draw()
+            target_x = self.slot_positions[e.target_slot]
+
+            # --- 1️⃣ Movimento até o slot ---
+            if e.state == "walking":
+                e.x -= e.vel_x * self.main_window.delta_time()
+                e.update()
+                e.draw()
+
+                # chegou no slot (com margem de 2px)
+                if e.x <= target_x + 2:
+                    e.x = target_x
+                    e.state = "attacking"
+                    e.image = pygame.image.load(e.image_file).convert_alpha()  # garante frame neutro
+                continue
+
+            # --- 2️⃣ Ataque à distância (corporal) ---
+            if e.state == "attacking":
+                if time() - e.last_attack >= e.attack_cooldown:
+                    e.last_attack = time()
+
+                    # Sacudida / recuo visual
+                    e.attack_offset = e.attack_recoil
+                    e.state = "recovering"
+
+                    # Aplica dano proporcional à distância
+                    damage = int(e.damage * self.slot_damage_multiplier[e.target_slot])
+                    self.mago.life -= damage
+
+                # mantém frame neutro de ataque
+                e.draw()
+
+            # --- 3️⃣ Recuo após ataque ---
+            elif e.state == "recovering":
+                # Movimento tipo vai e volta
+                phase = sin(e.attack_offset) * 4
+                e.x += phase
+                e.attack_offset -= 10 * self.main_window.delta_time()
+
+                e.attack_offset -= 50 * self.main_window.delta_time()
+
+                # Quando termina o recuo, volta pro estado de ataque
+                if e.attack_offset <= 0:
+                    e.attack_offset = 0
+                    e.state = "attacking"
+
+                e.draw()
 
     def animate_mage(self):
         now = time()
