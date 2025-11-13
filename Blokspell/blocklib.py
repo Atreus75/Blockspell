@@ -90,6 +90,50 @@ class Spell(Sprite):
         self.x = x
         self.y = y
 
+class Rain(Sprite):
+    def __init__(self, x=0, y=0, frames=None):
+        super().__init__('src/açoes/raio/frame-1.png')
+        self.x = x
+        self.y = y
+        self.frames = frames or []
+        self.current_frame = 0
+        self.damage = 30
+        self.last_animation = time()
+        self.animation_timeout = 0.05
+        self.finished = False
+        self.has_hit = False  # garante que só dá dano uma vez
+        self.enemy_hitbox_radius = 60  # tolerância do impacto
+
+    def update(self, window, enemies):
+        """Atualiza animação e aplica dano no frame do impacto."""
+        now = time()
+        if now - self.last_animation >= self.animation_timeout:
+            self.last_animation = now
+            self.current_frame += 1
+
+            # se acabou os frames, remove
+            if self.current_frame >= len(self.frames):
+                self.finished = True
+                return
+
+            # atualiza imagem
+            self.image = self.frames[self.current_frame]
+
+            # aplica dano no frame do impacto (ajuste fino)
+            if self.current_frame == 4 and not self.has_hit:
+                for enemy in enemies:
+                    if enemy and abs(enemy.x - self.x) < self.enemy_hitbox_radius:
+                        enemy.life -= self.damage
+                        if enemy.life <= 0:
+                            enemy.alive = False
+                        # 💥 feedback visual: faz o inimigo piscar
+                        flash_surface = pygame.Surface((enemy.width, enemy.height), pygame.SRCALPHA)
+                        flash_surface.fill((255, 255, 255, 150))
+                        window.screen.blit(flash_surface, (enemy.x, enemy.y))
+                        self.has_hit = True
+
+        # desenha o raio em tela
+        self.draw()
 
 
 
@@ -297,12 +341,16 @@ class Game:
         ]
         self.slot_damage_multiplier = [1.0, 0.7, 0.4]  # Dano reduzido conforme distância
         self.last_enemy_gen = time()
-
-
-
         self.current_spells = []
         self.spell_velx = 200
         self._load_spell_assets()
+        
+        self.rain_frames = [
+            pygame.image.load(f"src/açoes/raio/frame-{i}.png").convert_alpha() 
+            for i in range(1, 10)
+        ]
+        self.current_rains = []
+        self.last_rain_gen = 0
 
     def placar(self):
         self.main_window.draw_text(f"Score: {self.score}", 10, 40, size=25, color=(255, 255, 255))
@@ -334,21 +382,21 @@ class Game:
     # tetris_pplay.py
 
     def generate_enemies(self):
-        """Garante até 3 inimigos ativos, preenchendo slots vazios com novos que caminham até o destino."""
+        """Garante até 3 inimigos em fila da esquerda pra direita."""
         # Remove mortos
         for i in range(3):
             e = self.enemy_slots[i]
             if e and not e.alive:
                 self.enemy_slots[i] = None
 
-        # Avança inimigos para frente se houver buracos
+        # Avança os de trás para frente se houver espaço
         for i in range(2):
             if self.enemy_slots[i] is None and self.enemy_slots[i + 1]:
                 self.enemy_slots[i] = self.enemy_slots[i + 1]
                 self.enemy_slots[i + 1] = None
                 self.enemy_slots[i].target_slot = i
 
-        # Gera novos inimigos no slot mais distante vazio
+        # Gera novos inimigos sempre na posição mais à direita disponível
         for i in range(2, -1, -1):
             if self.enemy_slots[i] is None:
                 choose = randint(0, 19)
@@ -359,14 +407,48 @@ class Game:
                 else:
                     e = Rato()
 
-                # nasce fora da tela à direita
-                e.x = self.main_window.width + randint(20, 100)
+                # nasce fora da tela, anda até o slot
+                e.x = self.main_window.width + randint(50, 100)
                 e.y = self.chao.y - e.height
                 e.target_slot = i
-                e.last_attack = time()
+                e.state = "walking"
                 e.alive = True
+                e.last_attack = time()
                 self.enemy_slots[i] = e
 
+    def launch_rain(self):
+        """Lança um raio sobre cada inimigo visível, respeitando cooldown individual."""
+        now = time()
+        any_spawned = False
+
+        for enemy in self.enemy_slots:
+            if not enemy:
+                continue
+
+            # cooldown individual de cada inimigo
+            if not hasattr(enemy, "last_rain_time"):
+                enemy.last_rain_time = 0
+
+            if now - enemy.last_rain_time >= 1.5:
+                enemy.last_rain_time = now
+
+                x = enemy.x + enemy.width // 2
+                y = 200  # um pouco acima do inimigo
+
+                self.current_rains.append(Rain(x, y, self.rain_frames))
+                any_spawned = True
+
+        print(f"[DEBUG] Raios ativos: {len(self.current_rains)} (spawned={any_spawned})")
+
+    def update_rain(self):
+        """Atualiza todos os raios ativos."""
+        for rain in self.current_rains[:]:
+            rain.update(self.main_window, self.enemy_slots)
+            if rain.finished:
+                self.current_rains.remove(rain)
+
+
+                
     def launch_spell(self, power=1):
         """Cria e adiciona um novo feitiço ofensivo escalonado visualmente pelo dano."""
         x = self.mago.x + self.mago.width - 20
@@ -384,7 +466,7 @@ class Game:
         # --- Escala visual conforme dano ---
         scale = 1.0 + (spell.damage / 100)
         if scale > 1.8:
-            scale = 1.8
+            scale = 2.5
         elif scale < 1.0:
             scale = 1.0
 
@@ -597,6 +679,9 @@ class Game:
             kb = self.main_window.get_keyboard()
 
             # --- pausa ---
+            if kb.key_pressed('r'):
+                self.launch_rain()
+                print(f'{len(self.current_rains)} rains in game.')
             if kb.key_pressed('ESC'):
                 pygame.time.wait(150)
                 resultado = self.pause_menu()
@@ -669,6 +754,8 @@ class Game:
             self.tetris.draw()
             self.animate_enemies()
             self.update_spells()
+            self.update_rain()
+            
             self.main_window.draw_text(f'LIFE: {self.mago.life}', self.mago.x, self.chao.y+25, 20, life_color, 'Arial', True, False)
             self.main_window.draw_text(f'MANA: {self.mago.mana}', self.mago.x + 100, self.chao.y+25, 20, (0, 0, 255), 'Arial', True, False)
             self.main_window.update()
