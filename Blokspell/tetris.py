@@ -1,349 +1,412 @@
-# tetris_pplay.py
+# tetris.py
+# Refatorado para API manual: spawn_piece_manual(forma:str, cor:str)
+# Suporta formas: "O","I","T","L","S","."  ( "." => 1x1 bloco )
+# Cores esperadas (português, minúsculo): "verde","azul","vermelho","amarelo"
+# "amarelo" é tratado internamente como "yellow" (compatibilidade)
+#
+# Rotação e controles ficam a cargo do jogador (up,left,right,down,space).
+# Nenhuma peça será gerada sem a chamada spawn_piece_manual.
+#
+# Leve otimização: evita cópias/iteração extra sempre que possível, mas mantém legibilidade.
+
 import random
 import pygame
+from time import time
 from PPlay.window import Window
 
-class Tetris:
-    # Tetromino shapes (1 = filled cell)
-    SHAPES = [
-        [[1,1,1,1]],                 # I
-        [[1,0,0],[1,1,1]],           # J
-        [[0,0,1],[1,1,1]],           # L
-        [[1,1],[1,1]],               # O
-        [[0,1,1],[1,1,0]],           # S
-        [[0,1,0],[1,1,1]],           # T
-        [[1,1,0],[0,1,1]]            # Z
-    ]
+# ---------- Helpers ----------
+def _now_s():
+    return time()
 
-    COLORS = {
-        1: (232, 31, 16),   # Red
-        2: (43, 227, 36),   # Green 
-        3: (45, 42, 245),   # Blue
-        4: (245, 238, 42),  # Yellow
-        5: (232, 31, 16),   # Red
-        6: (43, 227, 36),   # Green 
-        7: (45, 42, 245),   # Blue
-        8: (245, 238, 42)   # Yellow
+# map semantic color -> RGB for drawing in grid
+_COLOR_RGB = {
+    "verde": (0, 200, 0),
+    "azul": (0, 120, 255),
+    "vermelho": (200, 30, 30),
+    # internal gold (we store as 'yellow' internally to keep previous integration)
+    "yellow": (245, 238, 42),
+}
+
+# valid portuguese color inputs -> internal color key
+_COLOR_INPUT_MAP = {
+    "verde": "verde",
+    "azul": "azul",
+    "vermelho": "vermelho",
+    "amarelo": "yellow",  # maps to internal 'yellow' for compatibility with blocklib expectation
+}
+
+# ---------- Tetris class ----------
+class Tetris:
+    """
+    Tetris minimal, manual spawn API.
+    Methods of interest:
+      - spawn_piece_manual(forma:str, cor:str) -> bool
+      - update(), draw(), reset()
+      - get_last_cleared() -> list of dicts [{"red":..,"green":..,"blue":..,"yellow":..}, ...]
+    """
+
+    # shape matrices (1 = cell). Indexing pid starting at 1.
+    # Order chosen: 1:I, 2:L, 3:O, 4:S, 5:T, 6:dot (.), adjust mapping below
+    SHAPES = {
+        # I (4x1)
+        "I": [[1,1,1,1]],
+        # L (2x3 representation matching earlier)
+        "L": [[0,0,1],[1,1,1]],
+        # O (2x2)
+        "O": [[1,1],[1,1]],
+        # S (2x3)
+        "S": [[0,1,1],[1,1,0]],
+        # T (2x3)
+        "T": [[0,1,0],[1,1,1]],
+        # single cell
+        ".": [[1]],
     }
 
-    def __init__(self, window: Window, cols=10, rows=20, cell_size=28, top_left=(40,40)):
-        self.last_cleared_color_counts = []
+    # mapping from format string -> canonical format (upper-case) and pid not needed now (we use format)
+    ALLOWED_FORMS = set(["O","I","T","L","S","."])
+
+    # default fallback
+    DEFAULT_FORM = "O"
+    DEFAULT_COLOR_INPUT = "verde"
+
+    def __init__(self, window: Window, cols=10, rows=15, cell_size=28, top_left=(40,40), log=False):
+        # essentials
         self.window = window
+        self.screen = window.get_screen()
+        self.key = window.get_keyboard()
+
         self.cols = cols
         self.rows = rows
         self.cell_size = cell_size
         self.top_left = top_left
+        self.x, self.y = top_left
 
-        self.grid = [[0 for _ in range(self.cols)] for _ in range(self.rows)]
+        # grid stores either 0 (empty) or tuple (format_str, color_internal)
+        # color_internal will be one of "verde","azul","vermelho","yellow"
+        self.grid = [[0]*self.cols for _ in range(self.rows)]
 
+        # current piece dict or None
+        # structure: {"form":str, "matrix":list[list[int]], "x":int, "y":int, "color":str_internal}
         self.current = None
-        self.next_piece_id = self._rand_piece_id()
 
+        # timers
         self.fall_interval = 0.8
         self.fall_timer = 0.0
-
         self.move_cooldown = 0.12
         self.move_timer = 0.0
 
+        # flags
         self.game_over = False
-        
         self.full_grid = False
 
-        self.screen = self.window.get_screen()
-        self.keyboard = self.window.get_keyboard()
+        # last cleared lines info (list of dicts)
+        self.last_cleared_color_counts = []
 
-        self.space_was_pressed = False
+        # logging
+        self.log_enabled = bool(log)
 
-    # ---------- Helpers ----------
-    def _count_line_color_distribution_dict(self, row_index):
+    # -------------------------
+    # API: spawn_piece_manual
+    # -------------------------
+    def spawn_piece_manual(self, forma: str, cor: str) -> bool:
         """
-        Conta por ID na linha `row_index` e retorna dicionário:
-        { "red": n, "green": n, "blue": n, "yellow": n }
-        Compatível com duas possibilidades de mapeamento:
-        - se self.COLORS tem 4 entradas (1..4) -> map 1->red,2->green,3->blue,4->yellow
-        - se self.COLORS tem >=8 entries (repetições) -> map 1&5->red, 2&6->green, 3&7->blue, 4&8->yellow
+        Spawns a piece immediately at the top-center and it starts falling.
+        Parameters:
+          forma: "O","I","T","L","S","."
+          cor: "verde","azul","vermelho","amarelo" (português minúsculo)
+        Returns True if spawn succeeded, False otherwise (e.g. immediate collision -> game over).
+        If invalid inputs, substitutes defaults ("O","verde") per user's choice.
         """
-        # conta por id (1-based)
-        max_id = max((cell for cell in self.grid[row_index]), default=0)
-        # make sure we have at least list of zeros for indices
-        # build simple id counts
-        id_counts = {}
-        for val in self.grid[row_index]:
-            if val and val > 0:
-                id_counts[val] = id_counts.get(val, 0) + 1
 
-        # aggregate into semantic buckets
-        red = green = blue = yellow = 0
+        # normalize inputs
+        if not isinstance(forma, str):
+            forma = self.DEFAULT_FORM
+        form = forma.strip().upper()
+        if form not in self.ALLOWED_FORMS:
+            if self.log_enabled:
+                print(f"[TETRIS] spawn_piece_manual: formato inválido '{forma}', usando padrão '{self.DEFAULT_FORM}'")
+            form = self.DEFAULT_FORM
 
-        # If COLORS length >= 8 we assume repetition pattern 1->red,2->green,3->blue,4->yellow,5->red...
-        if len(self.COLORS) >= 8:
-            for id_key, cnt in id_counts.items():
-                mod = (id_key - 1) % 4  # 0..3 -> red,green,blue,yellow
-                if mod == 0:
-                    red += cnt
-                elif mod == 1:
-                    green += cnt
-                elif mod == 2:
-                    blue += cnt
-                elif mod == 3:
-                    yellow += cnt
-        else:
-            # fallback: first four IDs map in order red,green,blue,yellow
-            for id_key, cnt in id_counts.items():
-                if id_key == 1:
-                    red += cnt
-                elif id_key == 2:
-                    green += cnt
-                elif id_key == 3:
-                    blue += cnt
-                elif id_key == 4:
-                    yellow += cnt
-                else:
-                    # any unexpected id -> fold into closest (safe fallback)
-                    fold = (id_key - 1) % 4
-                    if fold == 0: red += cnt
-                    elif fold == 1: green += cnt
-                    elif fold == 2: blue += cnt
-                    elif fold == 3: yellow += cnt
+        if not isinstance(cor, str):
+            cor = self.DEFAULT_COLOR_INPUT
+        color_in = cor.strip().lower()
+        color_internal = _COLOR_INPUT_MAP.get(color_in)
+        if color_internal is None:
+            # fallback per option 9.B -> substitute default
+            if self.log_enabled:
+                print(f"[TETRIS] spawn_piece_manual: cor inválida '{cor}', usando padrão '{self.DEFAULT_COLOR_INPUT}'")
+            color_internal = _COLOR_INPUT_MAP[self.DEFAULT_COLOR_INPUT]
 
-        return {"red": red, "green": green, "blue": blue, "yellow": yellow}
-    
-    
-    def _count_line_color_distribution(self, row_index):
-        """
-            Retorna uma lista de contagens por cor para a linha `row_index` da grid.
-            A lista tem tamanho = len(self.COLORS). índice 0 corresponde à cor id=1.
-        """
-        counts = [0] * len(self.COLORS)
-        row = self.grid[row_index]
-        for val in row:
-            if val != 0:
-                idx = val - 1
-                if 0 <= idx < len(counts):
-                    counts[idx] += 1
-        return counts
- 
+        # get matrix copy (we store fresh list to avoid shared refs)
+        base = self.SHAPES.get(form)
+        if base is None:
+            base = self.SHAPES[self.DEFAULT_FORM]
+        # shallow copy rows to avoid mutation issues
+        mat = [row[:] for row in base]
 
+        # compute start x so piece is centered horizontally
+        width = len(mat[0])
+        start_x = (self.cols - width) // 2
+        start_y = 0
 
-    def _rand_piece_id(self):
-        return random.randint(1, len(self.SHAPES))
+        # if cannot place immediately -> game over
+        if not self._can_place(mat, start_x, start_y):
+            self.game_over = True
+            if self.log_enabled:
+                print("[TETRIS] spawn_piece_manual: colisão imediata -> GAME OVER")
+            return False
 
-    def _shape_matrix(self, pid):
-        return [row[:] for row in self.SHAPES[pid-1]]
+        # create current piece
+        self.current = {"form": form, "matrix": mat, "x": start_x, "y": start_y, "color": color_internal}
+        self.fall_timer = 0.0
+        self.move_timer = 0.0
 
-    def _rotate_cw(self, mat):
-        return [list(row) for row in zip(*mat[::-1])]
+        if self.log_enabled:
+            print(f"[TETRIS] spawn_piece_manual: spawned form={form} color_internal={color_internal} at x={start_x},y={start_y}")
+        return True
 
+    # -------------------------
+    # placement helpers
+    # -------------------------
     def _can_place(self, mat, x, y):
-        for r, row in enumerate(mat):
-            for c, val in enumerate(row):
-                if not val:
+        # check quickly
+        rows = len(mat)
+        cols = len(mat[0])
+        if x < -cols or x > self.cols:  # fast reject
+            return False
+        for r in range(rows):
+            row = mat[r]
+            gy = y + r
+            for c in range(cols):
+                if row[c] == 0:
                     continue
                 gx = x + c
-                gy = y + r
                 if gx < 0 or gx >= self.cols or gy >= self.rows:
                     return False
                 if gy >= 0 and self.grid[gy][gx] != 0:
                     return False
         return True
 
-    def spawn_piece(self):
-        pid = self.next_piece_id
-        self.next_piece_id = self._rand_piece_id()
-        mat = self._shape_matrix(pid)
-        x = (self.cols - len(mat[0])) // 2
-        # Mudança: spawn a partir do topo visível (linha 0). Não mais acima do grid.
-        y = 0
-        self.current = {"matrix": mat, "x": x, "y": y, "id": pid}
-
-        # Atualiza full_grid com base no estado atual da grade:
-        any_full_row = any(all(cell != 0 for cell in row) for row in self.grid)
-        top_occupied = any(self.grid[0][c] != 0 for c in range(self.cols))
-        self.full_grid = any_full_row or top_occupied
-
-        # Game over se não puder colocar no topo OU se topo já ocupado (full_grid indica isso).
-        if not self._can_place(mat, x, y) or top_occupied:
-            self.game_over = True
-
+    # -------------------------
+    # locking and clearing
+    # -------------------------
     def _lock_piece(self):
-        mat = self.current["matrix"]
-        x = self.current["x"]
-        y = self.current["y"]
-        pid = self.current["id"]
+        cur = self.current
+        if not cur:
+            return []
+        mat = cur["matrix"]
+        x0 = cur["x"]
+        y0 = cur["y"]
+        color = cur["color"]
+        form = cur["form"]
 
-        # escreve bloco na grade
+        placed_cells = []
         for r, row in enumerate(mat):
+            gy = y0 + r
             for c, val in enumerate(row):
                 if not val:
                     continue
-                gx = x + c
-                gy = y + r
-                if 0 <= gy < self.rows and 0 <= gx < self.cols:
-                    self.grid[gy][gx] = pid
+                gx = x0 + c
+                if 0 <= gx < self.cols and 0 <= gy < self.rows:
+                    # store tuple (form, color_internal)
+                    self.grid[gy][gx] = (form, color)
+                    placed_cells.append((gx, gy))
 
-        # Antes de limpar, detecta se alguma fileira estava totalmente ocupada
-        any_full_row = any(all(cell != 0 for cell in row) for row in self.grid)
-        top_occupied = any(self.grid[0][c] != 0 for c in range(self.cols))
-        self.full_grid = any_full_row or top_occupied
+        # clear lines
+        cleared = self._clear_lines()
+        self.last_cleared_color_counts = cleared
 
-        # Limpa linhas completas e recupera as contagens por cor
-        cleared_info = self._clear_lines()  # retorna lista de contagens por linha
-
-        # Remove referência à peça atual e tenta spawnar próxima (se não game over)
+        # free current
         self.current = None
 
-        # armazenamos também aqui para fácil acesso imediato
-        self.last_cleared_color_counts = cleared_info
+        # check top row for game-over/full_grid
+        top_occupied = any(self.grid[0][c] != 0 for c in range(self.cols))
+        self.full_grid = top_occupied
+        if top_occupied:
+            self.game_over = True
 
-        if not self.game_over:
-            self.spawn_piece()
-
-        # opcional: retornar as contagens para quem chamou (útil em integrações)
-        return cleared_info
+        if self.log_enabled:
+            print(f"[TETRIS] locked piece form={form} color={color} placed {len(placed_cells)} cells, cleared_lines={len(cleared)}")
+        return cleared
 
     def _clear_lines(self):
         """
-        Remove linhas completas. Retorna lista de dicionários:
-        [ {"red":..,"green":..,"blue":..,"yellow":..}, ... ]
-        E preenche self.last_cleared_color_counts com essa lista.
+        Scan rows once, build new grid with removed full rows.
+        Returns list of dicts with counts per semantic color {"red","green","blue","yellow"} in the order they were cleared (top->bottom).
         """
-        cleared_info = []
-        new_grid = []
-        for row_idx, row in enumerate(self.grid):
-            if all(cell != 0 for cell in row):
-                # conta por cor semanticamente antes de remover
-                counts_dict = self._count_line_color_distribution_dict(row_idx)
-                cleared_info.append(counts_dict)
-                # não adiciona a row -> efetivamente remove
+        out_counts = []
+        write_rows = []  # rows to keep (not full)
+        for r in range(self.rows):
+            row = self.grid[r]
+            full = True
+            # check quickly if full
+            for cell in row:
+                if cell == 0:
+                    full = False
+                    break
+            if full:
+                # count colors in this row
+                counts = {"red":0,"green":0,"blue":0,"yellow":0}
+                for cell in row:
+                    if not cell:
+                        continue
+                    # cell is (form,color_internal)
+                    if isinstance(cell, tuple):
+                        _, color_internal = cell
+                        if color_internal == "verde":
+                            counts["green"] += 1
+                        elif color_internal == "azul":
+                            counts["blue"] += 1
+                        elif color_internal == "vermelho":
+                            counts["red"] += 1
+                        elif color_internal in ("yellow","dourado"):
+                            counts["yellow"] += 1
+                        else:
+                            counts["red"] += 1
+                    else:
+                        # should not happen in refactored code; fallback map by form char
+                        counts["red"] += 1
+                out_counts.append(counts)
             else:
-                new_grid.append(row)
-
-        # adiciona linhas vazias no topo pelo número de removidas
-        for _ in range(len(cleared_info)):
-            new_grid.insert(0, [0] * self.cols)
-
-        if cleared_info:
+                write_rows.append(row)
+        # insert empty rows on top
+        if out_counts:
+            new_grid = [[0]*self.cols for _ in range(len(out_counts))] + write_rows
+            # ensure length equals rows
+            if len(new_grid) != self.rows:
+                # pad if necessary
+                while len(new_grid) < self.rows:
+                    new_grid.insert(0, [0]*self.cols)
+                new_grid = new_grid[-self.rows:]
             self.grid = new_grid
+        return out_counts
 
-        # atualiza full_grid pós clear
-        any_full_row = any(all(cell != 0 for cell in row) for row in self.grid)
-        top_occupied = any(self.grid[0][c] != 0 for c in range(self.cols))
-        self.full_grid = any_full_row or top_occupied
+    # -------------------------
+    # input handlers / movement
+    # -------------------------
+    def _try_move(self, dx):
+        if not self.current:
+            return
+        nx = self.current["x"] + dx
+        if self._can_place(self.current["matrix"], nx, self.current["y"]):
+            self.current["x"] = nx
 
-        # guarda resultado
-        self.last_cleared_color_counts = cleared_info
-        return cleared_info
+    def _try_rotate(self):
+        if not self.current:
+            return
+        mat = self.current["matrix"]
+        rotated = [list(row) for row in zip(*mat[::-1])]
+        # simple kicks
+        for k in (0, -1, 1, -2, 2):
+            if self._can_place(rotated, self.current["x"] + k, self.current["y"]):
+                self.current["matrix"] = rotated
+                self.current["x"] += k
+                return
 
-    # ---------- API ----------
-    def reset(self):
-        self.grid = [[0 for _ in range(self.cols)] for _ in range(self.rows)]
-        self.current = None
-        self.next_piece_id = self._rand_piece_id()
-        self.fall_timer = 0.0
-        self.move_timer = 0.0
-        self.game_over = False
-        self.full_grid = False
-        self.spawn_piece()
+    def _try_soft_drop(self):
+        if not self.current:
+            return
+        if self._can_place(self.current["matrix"], self.current["x"], self.current["y"] + 1):
+            self.current["y"] += 1
+        else:
+            self._lock_piece()
 
-    def handle_input(self, dt):
-        self.move_timer += dt
-        kb = self.keyboard
-        if kb.key_pressed("left") and self.move_timer >= self.move_cooldown:
-            if self.current and self._can_place(self.current["matrix"], self.current["x"] - 1, self.current["y"]):
-                self.current["x"] -= 1
-            self.move_timer = 0.0
-        if kb.key_pressed("right") and self.move_timer >= self.move_cooldown:
-            if self.current and self._can_place(self.current["matrix"], self.current["x"] + 1, self.current["y"]):
-                self.current["x"] += 1
-            self.move_timer = 0.0
+    def _try_hard_drop(self):
+        if not self.current:
+            return
+        while self._can_place(self.current["matrix"], self.current["x"], self.current["y"] + 1):
+            self.current["y"] += 1
+        self._lock_piece()
 
-        if kb.key_pressed("up") and self.move_timer >= self.move_cooldown:
-            if self.current:
-                newm = self._rotate_cw(self.current["matrix"])
-                kicks = [0, -1, 1, -2, 2]
-                for k in kicks:
-                    if self._can_place(newm, self.current["x"] + k, self.current["y"]):
-                        self.current["matrix"] = newm
-                        self.current["x"] += k
-                        break
-            self.move_timer = 0.0
-
-        # hard drop
-        if kb.key_pressed("space") and not self.space_was_pressed:
-            if self.current:
-                while self._can_place(self.current["matrix"], self.current["x"], self.current["y"] + 1):
-                    self.current["y"] += 1
-                self._lock_piece()
-            self.space_was_pressed = True
-        elif not kb.key_pressed("space"):
-            self.space_was_pressed = False
-
+    # -------------------------
+    # public update & draw
+    # -------------------------
     def update(self):
+        """Call every frame from host game loop."""
         if self.game_over:
             return
-
         dt = self.window.delta_time()
-        self.handle_input(dt)
+        kb = self.key
 
-        kb = self.keyboard
-        if kb.key_pressed("down"):
-            fall_speed = 0.03
-        else:
-            fall_speed = self.fall_interval
+        # movement input
+        self.move_timer += dt
+        if self.current:
+            if kb.key_pressed("left") and self.move_timer >= self.move_cooldown:
+                self._try_move(-1)
+                self.move_timer = 0.0
+            if kb.key_pressed("right") and self.move_timer >= self.move_cooldown:
+                self._try_move(1)
+                self.move_timer = 0.0
+            if kb.key_pressed("up") and self.move_timer >= self.move_cooldown:
+                self._try_rotate()
+                self.move_timer = 0.0
 
-        self.fall_timer += dt
-        if self.fall_timer >= fall_speed:
-            self.fall_timer = 0.0
-            if self.current is None:
-                self.spawn_piece()
-            else:
+            # drop controls
+            fall_speed = 0.03 if kb.key_pressed("down") else self.fall_interval
+
+            self.fall_timer += dt
+            if self.fall_timer >= fall_speed:
+                self.fall_timer = 0.0
                 if self._can_place(self.current["matrix"], self.current["x"], self.current["y"] + 1):
                     self.current["y"] += 1
                 else:
                     self._lock_piece()
+        else:
+            # no current piece: nothing to update for gravity (since spawn is manual)
+            pass
+
+        # hard drop
+        if kb.key_pressed("space"):
+            self._try_hard_drop()
 
     def draw(self):
+        """Draw board and current piece; call before window.update()."""
         screen = self.screen
         bx, by = self.top_left
         board_w = self.cols * self.cell_size
         board_h = self.rows * self.cell_size
 
-        pygame.draw.rect(screen, (40, 40, 40), (bx-4, by-4, board_w+8, board_h+8))
-        pygame.draw.rect(screen, (10, 10, 10), (bx, by, board_w, board_h))
+        # background
+        pygame.draw.rect(screen, (40,40,40), (bx-4, by-4, board_w+8, board_h+8))
+        pygame.draw.rect(screen, (10,10,10), (bx, by, board_w, board_h))
 
-        # static blocks
+        # locked blocks (read color from tuple)
         for r in range(self.rows):
+            row = self.grid[r]
+            ry = by + r * self.cell_size
             for c in range(self.cols):
-                val = self.grid[r][c]
-                if val != 0:
-                    color = self.COLORS.get(val, (200,200,200))
-                    rx = bx + c * self.cell_size
-                    ry = by + r * self.cell_size
-                    pygame.draw.rect(screen, color, (rx+1, ry+1, self.cell_size-2, self.cell_size-2))
-                    pygame.draw.rect(screen, (20,20,20), (rx+1, ry+1, self.cell_size-2, self.cell_size-2), 2)
+                val = row[c]
+                if not val:
+                    continue
+                # val is (form, color_internal)
+                if isinstance(val, tuple):
+                    _, color_internal = val
+                    rgb = _COLOR_RGB.get(color_internal, (200,200,200))
+                else:
+                    rgb = (200,200,200)
+                rx = bx + c * self.cell_size
+                pygame.draw.rect(screen, rgb, (rx+1, ry+1, self.cell_size-2, self.cell_size-2))
+                pygame.draw.rect(screen, (20,20,20), (rx+1, ry+1, self.cell_size-2, self.cell_size-2), 1)
 
-        # active piece (não desenha fora do grid)
+        # current piece
         if self.current:
             mat = self.current["matrix"]
-            pid = self.current["id"]
-            color = self.COLORS.get(pid, (200,200,200))
+            color_internal = self.current["color"]
+            rgb = _COLOR_RGB.get(color_internal, (200,200,200))
             for r, row in enumerate(mat):
                 for c, val in enumerate(row):
                     if not val:
                         continue
                     gx = self.current["x"] + c
                     gy = self.current["y"] + r
-                    # se fora horizontalmente ou abaixo do grid, pula
-                    if gx < 0 or gx >= self.cols or gy >= self.rows:
-                        continue
-                    # se acima do topo (gy < 0) o pedido foi que NÃO se desenhe fora do grid
-                    if gy < 0:
+                    if gx < 0 or gx >= self.cols or gy >= self.rows or gy < 0:
                         continue
                     rx = bx + gx * self.cell_size
                     ry = by + gy * self.cell_size
-                    pygame.draw.rect(screen, color, (rx+1, ry+1, self.cell_size-2, self.cell_size-2))
-                    pygame.draw.rect(screen, (20,20,20), (rx+1, ry+1, self.cell_size-2, self.cell_size-2), 2)
+                    pygame.draw.rect(screen, rgb, (rx+1, ry+1, self.cell_size-2, self.cell_size-2))
+                    pygame.draw.rect(screen, (20,20,20), (rx+1, ry+1, self.cell_size-2, self.cell_size-2), 1)
 
+        # grid lines
         for c in range(self.cols+1):
             x = bx + c * self.cell_size
             pygame.draw.line(screen, (30,30,30), (x, by), (x, by + board_h))
@@ -351,37 +414,37 @@ class Tetris:
             y = by + r * self.cell_size
             pygame.draw.line(screen, (30,30,30), (bx, y), (bx + board_w, y))
 
-        if self.game_over:
-            self.window.draw_text("GAME OVER", bx + 10, by + board_h//2 - 20, size=28, color=(255,255,255))
-            self.window.draw_text("R to restart", bx + 10, by + board_h//2 + 12, size=16, color=(200,200,200))
+    # -------------------------
+    # utilities
+    # -------------------------
+    def reset(self):
+        self.grid = [[0]*self.cols for _ in range(self.rows)]
+        self.current = None
+        self.fall_timer = 0.0
+        self.move_timer = 0.0
+        self.game_over = False
+        self.full_grid = False
+        self.last_cleared_color_counts = []
+        if self.log_enabled:
+            print("[TETRIS] reset called")
 
-        # mostro o estado do atributo full_grid pra você debugar (opcional)
-        # Você pode remover essa linha depois.
-        self.window.draw_text(f"full_grid: {self.full_grid}", bx, by - 20, size=14, color=(200,200,200))
-        self.window.draw_text("← → move   ↑ rotate   ↓ soft   SPACE hard", bx, by + board_h + 8, size=14, color=(200,200,200))
+    def get_last_cleared(self):
+        """Return and clear the last_cleared_color_counts list."""
+        out = self.last_cleared_color_counts[:]
+        self.last_cleared_color_counts = []
+        return out
 
+    # small runner for testing (manual spawn required)
     def run(self, fps=60):
         clock = pygame.time.Clock()
-        if self.current is None:
-            self.spawn_piece()
         while True:
-            self.window.set_background_color((50,50,50))
+            # host should set background externally
             self.draw()
             self.window.update()
-
-            # restart on 'r'
             if self.game_over:
-                events = pygame.event.get()
-                while True:
-                    if self.window.get_keyboard().key_pressed('r'):
-                        break
+                # wait for 'r' to restart
+                if self.window.get_keyboard().key_pressed('r'):
+                    self.reset()
             else:
                 self.update()
             clock.tick(fps)
-
-if __name__ == "__main__":
-    w = Window(360, 720)
-    w.set_title("Tetris - PPlay Minigame (com full_grid)")
-    t = Tetris(w, cols=10, rows=20, cell_size=28, top_left=(40,40))
-    t.reset()
-    t.run()

@@ -92,7 +92,7 @@ class Spell(Sprite):
 
 class Rain(Sprite):
     def __init__(self, x=0, y=0, frames=None):
-        super().__init__('src/açoes/raio/frame-1.png')
+        super().__init__('src/açoes/raio/frame-1.gif')
         self.x = x
         self.y = y
         self.frames = frames or []
@@ -134,7 +134,6 @@ class Rain(Sprite):
 
         # desenha o raio em tela
         self.draw()
-
 
 
 class Regeneration(Sprite):
@@ -319,6 +318,9 @@ class Game:
         self.mago.x = (self.castelo.x + self.castelo.width - 20)
         self.mago.y = self.main_window.height - (self.mago.height + (self.chao.height))
         self.tetris = Tetris(self.main_window, 10, 15, 28, (self.main_window.width//2 - 190, self.main_window.height//2 - 300))
+        self.selection_box = Sprite('src/cenario/select_back.png')
+        self.selection_box.x = self.tetris.x - self.selection_box.width - 20
+        self.selection_box.y = self.tetris.y + 70
 
         # Preset das clouds
         self.clouds = [
@@ -333,6 +335,37 @@ class Game:
         self.cloud_vel = -100
         self.last_cloud_animation = time()
 
+        self.block_sprites = [
+            'src/peças/I_azul.png',
+            'src/peças/I_verde.png',
+            'src/peças/I_vermelha.png',
+            'src/peças/L_azul.png',
+            'src/peças/L_verde.png',
+            'src/peças/L_vermelho.png',
+            'src/peças/O_azul.png',
+            'src/peças/O_verde.png',
+            'src/peças/O_vermelho.png',
+            'src/peças/S_azul.png',
+            'src/peças/S_verde.png',
+            'src/peças/S_vermelho.png',
+            'src/peças/T_azul.png',
+            'src/peças/T_verde.png',
+            'src/peças/T_vermelho.png'
+        ]
+        self.block_colors = [
+            'vermelho',
+            'azul',
+            'verde'
+        ]
+        self.block_shapes = [
+            'I',
+            'O',
+            'L',
+            'S'
+        ]
+        
+        self.current_block_options = [None, None, None]
+
         self.enemy_slots = [None, None, None]  # 3 posições fixas
         self.slot_positions = [
             self.mago.x + 300,  # Posição mais próxima
@@ -346,7 +379,7 @@ class Game:
         self._load_spell_assets()
         
         self.rain_frames = [
-            pygame.image.load(f"src/açoes/raio/frame-{i}.png").convert_alpha() 
+            pygame.image.load(f"src/açoes/raio/frame-{i}.gif").convert_alpha()
             for i in range(1, 10)
         ]
         self.current_rains = []
@@ -361,7 +394,6 @@ class Game:
             pygame.image.load(f"src/bola_fodona/Bola_{i}.png").convert_alpha() 
             for i in range(8)
         ]
-
 
     def animate_clouds(self):
         if len(self.current_clouds) >= 1:
@@ -446,8 +478,6 @@ class Game:
             rain.update(self.main_window, self.enemy_slots)
             if rain.finished:
                 self.current_rains.remove(rain)
-
-
                 
     def launch_spell(self, power=1):
         """Cria e adiciona um novo feitiço ofensivo escalonado visualmente pelo dano."""
@@ -666,17 +696,30 @@ class Game:
             self.mago.anim_state = False 
             self.mago.last_animation = 0
 
+    def update_select_box(self):
+        if len(self.current_block_options) <= 0:
+            color = choice(self.block_colors)
+            shape = choice(self.block_shapes)
+
+
+        self.selection_box.draw()
+
 
     def game_loop(self):
         last_limit_increse = 0
+        tm = 0
+        kb = self.main_window.get_keyboard()
         while True:
+            if kb.key_pressed('G') and time()-tm >= 2:
+                self.tetris.spawn_piece_manual('O', 'vermelho')
+                tm = time()
+
             # Aumenta o limite de inimigos a cada 60 segundos usando o total time
             if time() - last_limit_increse >=60:
                 last_limit_increse = time()
                 self.enemie_limit += 1
             
             self.main_window.set_background_color('black')
-            kb = self.main_window.get_keyboard()
 
             # --- pausa ---
             if kb.key_pressed('r'):
@@ -755,7 +798,8 @@ class Game:
             self.animate_enemies()
             self.update_spells()
             self.update_rain()
-            
+            self.update_select_box()
+
             self.main_window.draw_text(f'LIFE: {self.mago.life}', self.mago.x, self.chao.y+25, 20, life_color, 'Arial', True, False)
             self.main_window.draw_text(f'MANA: {self.mago.mana}', self.mago.x + 100, self.chao.y+25, 20, (0, 0, 255), 'Arial', True, False)
             self.main_window.update()
