@@ -159,7 +159,7 @@ class Menu:
         self.blocks = [
             Sprite('src/peças/I_azul.png'),
             Sprite('src/peças/I_verde.png'),
-            Sprite('src/peças/I_vermelha.png'),
+            Sprite('src/peças/I_vermelho.png'),
             Sprite('src/peças/L_azul.png'),
             Sprite('src/peças/L_verde.png'),
             Sprite('src/peças/L_vermelho.png'),
@@ -364,7 +364,7 @@ class Game:
             'S'
         ]
         
-        self.current_block_options = [None, None, None]
+        self.current_block_options = []
 
         self.enemy_slots = [None, None, None]  # 3 posições fixas
         self.slot_positions = [
@@ -509,8 +509,6 @@ class Game:
 
         print(f'Spell lançado com dano {spell.damage} (escala {scale:.2f}x)')
         self.current_spells.append(spell)
-
-
     
     def update_spells(self):
         """Atualiza movimento, colisões e animações de todos os feitiços ativos."""
@@ -697,13 +695,26 @@ class Game:
             self.mago.last_animation = 0
 
     def update_select_box(self):
-        if len(self.current_block_options) <= 0:
+        # Generate new block options and visually aligns it
+        if len(self.current_block_options) < 4:
             color = choice(self.block_colors)
             shape = choice(self.block_shapes)
+            complete_block_name = f'{shape}_{color}.png'
+            block = Sprite(f'src/peças/{complete_block_name}')
+            block.image = pygame.transform.scale(block.image, (int(self.selection_box.width) - 20, int(self.selection_box.height/4 - 20)))
+            block.width = block.image.get_width()
+            block.height = block.image.get_height()
+            block.rect = block.image.get_rect(topleft=(block.x, block.y))
+            block.x = self.selection_box.x + self.selection_box.width/2 - block.width/2
+            block.y = self.selection_box.y + self.selection_box.height - block.height if len(self.current_block_options) == 0 else self.current_block_options[-1].y - block.height - 25
+            self.current_block_options.append(block)
 
-
+        # Draws current options and aligns it
         self.selection_box.draw()
-
+        for c in range(0, len(self.current_block_options)):
+            option = self.current_block_options[c]
+            option.y = self.selection_box.y + self.selection_box.height - option.height if c == 0 else self.current_block_options[c-1].y - option.height - 25
+            option.draw()
 
     def game_loop(self):
         last_limit_increse = 0
