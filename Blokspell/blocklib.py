@@ -142,6 +142,16 @@ class Regeneration(Sprite):
         self.life_points = 5
         self.animation_duration = 1
 
+class BlockOption(Sprite):
+    def __init__(self, image_path, color, shape, selection_box):
+        super().__init__(image_path)
+        self.color = color
+        self.shape = shape
+        self.image = pygame.transform.scale(self.image, (int(selection_box.width) - 20, int(selection_box.height/4 - 20)))
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.rect = self.image.get_rect(topleft=(self.x, self.y))
+
 class Menu:
     def __init__(self, mouse=Mouse(), window=Window(0, 0)):
         self.main_window = window
@@ -365,6 +375,7 @@ class Game:
         ]
         
         self.current_block_options = []
+        self.last_piece_choice = 0
 
         self.enemy_slots = [None, None, None]  # 3 posições fixas
         self.slot_positions = [
@@ -384,6 +395,8 @@ class Game:
         ]
         self.current_rains = []
         self.last_rain_gen = 0
+
+        self.now = time()
 
     def placar(self):
         self.main_window.draw_text(f"Score: {self.score}", 10, 40, size=25, color=(255, 255, 255))
@@ -445,12 +458,11 @@ class Game:
                 e.target_slot = i
                 e.state = "walking"
                 e.alive = True
-                e.last_attack = time()
+                e.last_attack = self.now
                 self.enemy_slots[i] = e
 
     def launch_rain(self):
         """Lança um raio sobre cada inimigo visível, respeitando cooldown individual."""
-        now = time()
         any_spawned = False
 
         for enemy in self.enemy_slots:
@@ -461,8 +473,8 @@ class Game:
             if not hasattr(enemy, "last_rain_time"):
                 enemy.last_rain_time = 0
 
-            if now - enemy.last_rain_time >= 1.5:
-                enemy.last_rain_time = now
+            if self.now - enemy.last_rain_time >= 1.5:
+                enemy.last_rain_time = self.now
 
                 x = enemy.x + enemy.width // 2
                 y = 200  # um pouco acima do inimigo
@@ -488,7 +500,7 @@ class Game:
         spell.state = "moving"
         spell.current_frame = 0
         spell.current_collision_frame = 0
-        spell.last_animation = time()
+        spell.last_animation = self.now
         spell.last_collision_animation = 0
         spell.animation_timeout = 0.08
         spell.damage = 10 * power  # dano proporcional à força
@@ -539,8 +551,8 @@ class Game:
                 spell.x += self.spell_velx * self.main_window.delta_time()
 
                 # animação cíclica de voo
-                if time() - spell.last_animation >= spell.animation_timeout:
-                    spell.last_animation = time()
+                if self.now - spell.last_animation >= spell.animation_timeout:
+                    spell.last_animation = self.now
                     spell.current_frame = (spell.current_frame + 1) % 5
                     spell.image = self.spell_frames[spell.current_frame]
                     spell.width = spell.image.get_width()
@@ -554,7 +566,7 @@ class Game:
                     if spell.collided(enemy):
                         spell.state = "colliding"
                         spell.collided_with = enemy
-                        spell.last_collision_animation = time()
+                        spell.last_collision_animation = self.now
                         enemy.life -= spell.damage
 
                         # inimigo morre?
@@ -570,8 +582,8 @@ class Game:
 
             # COLISÃO / EXPLOSÃO
             elif spell.state == "colliding":
-                if time() - spell.last_collision_animation >= spell.animation_timeout:
-                    spell.last_collision_animation = time()
+                if self.now - spell.last_collision_animation >= spell.animation_timeout:
+                    spell.last_collision_animation = self.now
                     spell.current_collision_frame += 1
 
                     if spell.current_collision_frame < 3:
@@ -654,8 +666,8 @@ class Game:
 
             # --- 2️⃣ Ataque à distância (corporal) ---
             if e.state == "attacking":
-                if time() - e.last_attack >= e.attack_cooldown:
-                    e.last_attack = time()
+                if self.now - e.last_attack >= e.attack_cooldown:
+                    e.last_attack = self.now
 
                     # Sacudida / recuo visual
                     e.attack_offset = e.attack_recoil
@@ -685,11 +697,10 @@ class Game:
                 e.draw()
 
     def animate_mage(self):
-        now = time()
         if self.mago.anim_state == True and self.mago.last_animation == 0:
             self.mago.image = pygame.image.load(f"src/magos/mago_atk.png").convert_alpha()
-            self.mago.last_animation = now
-        elif now - self.mago.last_animation >= 0.5:
+            self.mago.last_animation = self.now
+        elif self.now - self.mago.last_animation >= 0.5:
             self.mago.image = pygame.image.load(f"src/magos/mago_p.png").convert_alpha()
             self.mago.anim_state = False 
             self.mago.last_animation = 0
@@ -700,34 +711,46 @@ class Game:
             color = choice(self.block_colors)
             shape = choice(self.block_shapes)
             complete_block_name = f'{shape}_{color}.png'
-            block = Sprite(f'src/peças/{complete_block_name}')
-            block.image = pygame.transform.scale(block.image, (int(self.selection_box.width) - 20, int(self.selection_box.height/4 - 20)))
-            block.width = block.image.get_width()
-            block.height = block.image.get_height()
-            block.rect = block.image.get_rect(topleft=(block.x, block.y))
+            block = BlockOption(f'src/peças/{complete_block_name}', color, shape, self.selection_box)
             block.x = self.selection_box.x + self.selection_box.width/2 - block.width/2
             block.y = self.selection_box.y + self.selection_box.height - block.height if len(self.current_block_options) == 0 else self.current_block_options[-1].y - block.height - 25
             self.current_block_options.append(block)
 
         # Draws current options and aligns it
         self.selection_box.draw()
+        controls = ['R', 'E', 'W', 'Q']
         for c in range(0, len(self.current_block_options)):
             option = self.current_block_options[c]
+            self.main_window.draw_text(f'{controls[c]}', self.selection_box.x - 50, option.y, 20, (0, 0, 0), 'freemono', True, False)
             option.y = self.selection_box.y + self.selection_box.height - option.height if c == 0 else self.current_block_options[c-1].y - option.height - 25
             option.draw()
+
+    def create_piece(self):
+        controls = ['R', 'E', 'W', 'Q']
+        for c in range(4):
+            if self.main_window.keyboard.key_pressed(controls[c]) and self.now - self.last_piece_choice >= 0.5:
+                self.last_piece_choice = self.now
+                option = self.current_block_options[c]
+                shape = option.shape
+                color = option.color
+                self.current_block_options.remove(option)
+                self.tetris.spawn_piece_manual(shape, color)
+                return
 
     def game_loop(self):
         last_limit_increse = 0
         tm = 0
         kb = self.main_window.get_keyboard()
         while True:
-            if kb.key_pressed('G') and time()-tm >= 2:
+            self.now = time()
+
+            if kb.key_pressed('G') and self.now-tm >= 2:
                 self.tetris.spawn_piece_manual('O', 'vermelho')
-                tm = time()
+                tm = self.now
 
             # Aumenta o limite de inimigos a cada 60 segundos usando o total time
-            if time() - last_limit_increse >=60:
-                last_limit_increse = time()
+            if self.now - last_limit_increse >=60:
+                last_limit_increse = self.now
                 self.enemie_limit += 1
             
             self.main_window.set_background_color('black')
@@ -740,7 +763,7 @@ class Game:
                 pygame.time.wait(150)
                 resultado = self.pause_menu()
                 if resultado == "menu":
-                    self.esc_pressed = time()
+                    self.esc_pressed = self.now
                     break
             if self.mago.life <= 0: # game over
                 break
@@ -792,8 +815,6 @@ class Game:
 
                 # limpa após processar tudo
                 self.tetris.last_cleared_color_counts.clear()
-
-            # Enemies animations
             
             # Draws
             self.ceu.draw()
@@ -810,8 +831,9 @@ class Game:
             self.update_spells()
             self.update_rain()
             self.update_select_box()
+            self.create_piece()
 
-            self.main_window.draw_text(f'LIFE: {self.mago.life}', self.mago.x, self.chao.y+25, 20, life_color, 'Arial', True, False)
-            self.main_window.draw_text(f'MANA: {self.mago.mana}', self.mago.x + 100, self.chao.y+25, 20, (0, 0, 255), 'Arial', True, False)
+            self.main_window.draw_text(f'LIFE: {self.mago.life}', self.mago.x, self.chao.y+25, 20, life_color, 'freemono', True, False)
+            self.main_window.draw_text(f'MANA: {self.mago.mana}', self.mago.x + 100, self.chao.y+25, 20, (0, 0, 255), 'freemono', True, False)
             self.main_window.update()
             self.tetris.update()
