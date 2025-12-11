@@ -1226,6 +1226,7 @@ class Game:
 
             if self.mago.life <= 0: # game over
                 self.game_over = True
+                self.soundtrack.stop()
                 self.game_over_loop()
                 break
 
@@ -1337,3 +1338,4 @@ class Game:
             last_key_state["1"] = current_1
             last_key_state["2"] = current_2
             last_key_state["ESC"] = current_ESC
+
