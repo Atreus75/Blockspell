@@ -203,7 +203,7 @@ class BlockOption(Sprite):
         super().__init__(image_path)
         self.color = color
         self.shape = shape
-        self.image = pygame.transform.scale(self.image, (int(selection_box.width) - 20, int(selection_box.height/4 - 20)))
+        self.image = pygame.transform.scale(self.image, (int(selection_box.width) - 40, int(selection_box.height/4 - 40)))
         self.width = self.image.get_width()
         self.height = self.image.get_height()
         self.rect = self.image.get_rect(topleft=(self.x, self.y))
@@ -504,6 +504,7 @@ class Game:
         self.mana_regenerations = []
         self.mana_regen_frame = 0
 
+        self.game_over = False
         self.now = time()
 
         # Difficulty stuff
@@ -536,8 +537,55 @@ class Game:
         self.shield_unlocked = False
         self.thunder_unlocked = False
 
-    def upgrade_loop(self):
+        self.soundtrack = Sound('src/sounds/game_soundtrack.wav')
 
+    def game_over_loop(self):
+        Sound('src/sounds/falha.mp3').play()
+        init = time()
+        mago_triste = Sprite('src/cenario/mago_triste.png')
+        mago_triste.x = self.main_window.width/2 - int(mago_triste.image.get_width()/2)
+        mago_triste.y = 0-mago_triste.height
+        frames_pong = [
+            pygame.image.load('src/magos/magopong1.png'),
+            pygame.image.load('src/magos/magopong2.png')
+        ]
+        current_pong_frame = 0
+        mago_pong = Sprite('src/magos/magopong1.png')
+        mago_pong_vel = 30
+        mago_pong.x = self.main_window.width + 10
+        mago_pong.y = self.chao.y - mago_pong.height + 5
+        mago_pong_anim_interval = 1.0
+        last_mg_anim = 0
+        sad_song = Sound('src/sounds/game_over.wav')
+        sad_song.loop = True
+        sad_song.play()
+
+        while True:
+            self.ceu.draw()
+            self.chao.draw()
+            self.animate_enemies()
+            if time()-last_mg_anim >= mago_pong_anim_interval:
+                last_mg_anim = time()
+                mago_pong.image = frames_pong[current_pong_frame]
+                if current_pong_frame == 1:
+                    mago_pong.y -= 5
+                else:
+                    mago_pong.y += 5
+                current_pong_frame = 1 if current_pong_frame == 0 else 0
+    
+            mago_pong.x -= mago_pong_vel * self.main_window.delta_time()
+            mago_pong.draw()
+            mago_triste.y += 50 * self.main_window.delta_time() if mago_triste.y <= 0 else 0
+            mago_triste.draw()
+            if self.main_window.get_keyboard().key_pressed('ENTER') and time()-init >= 5:
+                sad_song.stop()
+                break
+            self.main_window.draw_text('VOCÊ FALHOU', mago_triste.x+mago_triste.width/2 - 170, self.main_window.height/2-50, 60, (255, 0, 0), 'freemono', True)
+            self.main_window.update()
+
+
+    def upgrade_loop(self):
+        self.soundtrack.decrease_volume(20)
         back_screen = Sprite('src/hud/upgrade-background.png')
         back_screen.y = self.main_window.height/2 - back_screen.height/2
         back_screen.x = self.main_window.width/2 - back_screen.width/2
@@ -572,7 +620,7 @@ class Game:
             self.castelo.draw()
             self.chao.draw()
             back_screen.draw()
-            self.main_window.draw_text('OS DEUSES DAS FORMAS LHE DÃO FORÇAS', int(back_screen.x+back_screen.width/2 - 150), back_screen.y + 50, 20, (255, 0, 0), 'freemono', True, False)
+            self.main_window.draw_text('O DEUS DAS FORMAS LHE DÁ FORÇAS', int(back_screen.x+back_screen.width/2 - 200), back_screen.y + 50, 25, (255, 0, 0), 'freemono', True, False)
             op1.draw()
             op2.draw()
             self.main_window.update()
@@ -585,11 +633,13 @@ class Game:
             self.mago.mana_limit = int(self.mago.mana_limit * 1.25)
         elif final.type == 'thunder':
             self.thunder_unlocked = True
-            Sound('src/sounds/thunder_disp.mp3')
+            Sound('src/sounds/thunder_disp.mp3').play()
         elif final.type == 'shield':
             self.shield_unlocked = True
-            Sound('src/sounds/shield_disp.mp3')
+            Sound('src/sounds/shield_disp.mp3').play()
  
+        self.soundtrack.increase_volume(20)
+
     def regen_life(self):
         if len(self.life_regenerations) > 0:
             if self.life_regen_frame >= 6:
@@ -859,9 +909,8 @@ class Game:
         spell.last_animation = self.now
         spell.last_collision_animation = 0
         spell.animation_timeout = 0.08
-        spell.damage *= power  # dano proporcional à força
+        spell.damage *= power * self.mago.damage_multiplier
 
-        # --- Escala visual conforme dano ---
         scale = 1.0 + (spell.damage / 100)/2
         if scale > 4:
             scale = 4
@@ -994,6 +1043,7 @@ class Game:
 
 
     def pause_menu(self):
+        self.soundtrack.decrease_volume(20)
         mouse = self.main_window.get_mouse()
         # --- Carrega imagens ---
         fundo = GameImage("src/menu/fundo_menu.jpg")
@@ -1028,6 +1078,7 @@ class Game:
                     return "menu"
 
             self.main_window.update()
+        self.soundtrack.increase_volume(20)
 
     def animate_enemies(self):
         """Atualiza movimento, ataques e animações dos inimigos por slot."""
@@ -1035,13 +1086,19 @@ class Game:
             if not e:
                 continue
 
+            if self.game_over:
+                e.state = "walking"
+            
             target_x = self.slot_positions[e.target_slot]
 
             # --- 1️⃣ Movimento até o slot ---
             if e.state == "walking":
-                e.x -= e.vel_x * self.main_window.delta_time()
+                e.x -= e.vel_x * self.main_window.delta_time() * self.speed_multiplier
                 e.update()
                 e.update_hit(self.main_window.delta_time())
+                if self.game_over:
+                    e.draw()
+                    continue
 
                 # chegou no slot (com margem de 2px)
                 if e.x <= target_x + 2:
@@ -1061,10 +1118,12 @@ class Game:
                 e.x -= e.dash_speed * self.main_window.delta_time()
 
                 # quando alcança o mago → causa dano e começa voltar
-                if e.x <= self.mago.x + 30:
+                if len(self.current_shields) > 0 and e.x <= self.current_shields[-1].x or e.x <= self.mago.x + 30:
                     if not self.mago.imune:
                         self.mago.take_damage(e.damage)
                         Sound('src/sounds/player_hit.wav').play()
+                    else:
+                        Sound('src/sounds/shield_disp.mp3').play()
                     e.state = "returning"
 
             # --- Voltando ao slot ---
@@ -1105,7 +1164,8 @@ class Game:
             
             block = BlockOption(f'src/peças/{complete_block_name}', color, shape, self.selection_box)
             block.x = self.selection_box.x + self.selection_box.width/2 - block.width/2
-            block.y = self.selection_box.y + self.selection_box.height - block.height if len(self.current_block_options) == 0 else self.current_block_options[-1].y - block.height - 25
+            block.y = self.selection_box.y + self.selection_box.height - block.height - 50 if len(self.current_block_options) == 0 else self.current_block_options[-1].y - block.height + 10
+            
             self.current_block_options.append(block)
 
         # Draws current options and aligns it
@@ -1114,7 +1174,7 @@ class Game:
         for c in range(0, len(self.current_block_options)):
             option = self.current_block_options[c]
             self.main_window.draw_text(f'{controls[c]}', self.selection_box.x - 50, option.y, 20, (0, 0, 0), 'freemono', True, False)
-            option.y = self.selection_box.y + self.selection_box.height - option.height if c == 0 else self.current_block_options[c-1].y - option.height - 25
+            option.y = self.selection_box.y + self.selection_box.height - option.height - 50 if c == 0 else self.current_block_options[c-1].y - option.height - 25
             option.draw()
 
     def create_piece(self):
@@ -1130,10 +1190,9 @@ class Game:
                 return
 
     def game_loop(self):
-        soundtrack = Sound('src/sounds/game_soundtrack.wav')
-        soundtrack.loop = True
-        soundtrack.play()
-        soundtrack.decrease_volume(20)
+        self.soundtrack.loop = True
+        self.soundtrack.play()
+        self.soundtrack.decrease_volume(20)
 
         last_limit_increse = 0
         kb = self.main_window.get_keyboard()
@@ -1166,9 +1225,10 @@ class Game:
                     break
 
             if self.mago.life <= 0: # game over
-                soundtrack.stop()
+                self.game_over = True
+                self.game_over_loop()
                 break
-            
+
             if self.tetris.game_over:
                 self.tetris.reset()
             self.animate_clouds()
