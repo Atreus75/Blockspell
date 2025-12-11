@@ -71,6 +71,7 @@ class Tetris:
 
     def __init__(self, window: Window, cols=10, rows=15, cell_size=28, top_left=(40,40), log=False):
         # essentials
+        self.last_locked_piece = 0
         self.window = window
         self.screen = window.get_screen()
         self.key = window.get_keyboard()
@@ -88,6 +89,8 @@ class Tetris:
         # current piece dict or None
         # structure: {"form":str, "matrix":list[list[int]], "x":int, "y":int, "color":str_internal}
         self.current = None
+        self.falling_piece = False
+
 
         # timers
         self.fall_interval = 0.8
@@ -160,6 +163,8 @@ class Tetris:
         self.current = {"form": form, "matrix": mat, "x": start_x, "y": start_y, "color": color_internal}
         self.fall_timer = 0.0
         self.move_timer = 0.0
+        self.falling_piece = True 
+
 
         if self.log_enabled:
             print(f"[TETRIS] spawn_piece_manual: spawned form={form} color_internal={color_internal} at x={start_x},y={start_y}")
@@ -227,6 +232,8 @@ class Tetris:
 
         if self.log_enabled:
             print(f"[TETRIS] locked piece form={form} color={color} placed {len(placed_cells)} cells, cleared_lines={len(cleared)}")
+        self.falling_piece = False
+        self.last_locked_piece = time()
         return cleared
 
     def _clear_lines(self):
@@ -323,8 +330,14 @@ class Tetris:
     # -------------------------
     def update(self):
         """Call every frame from host game loop."""
+
         if self.game_over:
+            self.falling_piece = False
             return
+        
+        if not self.current:
+            self.falling_piece = False
+        
         dt = self.window.delta_time()
         kb = self.key
 
