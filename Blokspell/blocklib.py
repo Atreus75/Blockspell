@@ -34,10 +34,10 @@ class Enemie(Animation):
         self.last_attack = 0
         self.attack_cooldown = attack_cooldown
         self.alive = True
-        self.state = "walking"  # walking / attacking / recovering
+        self.state = "walking"  # walking / attacking / recovering / dying
         self.attack_offset = 0  # deslocamento momentâneo no ataque
         self.attack_recoil = 6  # quão forte a sacudida é
-        self.recover_time = 0.15  # tempo pra voltar da sacudida
+        self.recover_time = 0.50  # tempo pra voltar da sacudida
         self.image_file = image_file
 
     def move(self):
@@ -46,32 +46,37 @@ class Enemie(Animation):
 class Cachorro(Enemie):
     def __init__(self):
         image_file = 'src/inimigos/cachorro_spritesheet.png'
-        super().__init__(image_file, frames=12, move_timeout=3, damage=20, life=100, vel_x=25, attack_cooldown=5)
+        super().__init__(image_file, frames=12, move_timeout=3, damage=10, life=100, vel_x=25, attack_cooldown=5)
 
 class Gorila(Enemie):
     def __init__(self):
         image_file = 'src/inimigos/gorila_spritesheet.png'
-        super().__init__(image_file, frames=6, move_timeout=5, damage=50, life=200, vel_x=10, attack_cooldown=8)
+        super().__init__(image_file, frames=6, move_timeout=5, damage=25, life=200, vel_x=15, attack_cooldown=8)
 
 class Rato(Enemie):
     def __init__(self):
         image_file = 'src/inimigos/rato_spritesheet.png'
-        super().__init__(image_file, frames=3, move_timeout=1, damage=5, life=50, vel_x=40, attack_cooldown=2)
+        super().__init__(image_file, frames=3, move_timeout=1, damage=2, life=50, vel_x=45, attack_cooldown=2)
 
 class Mago(Sprite):
     def __init__(self, image_file, frames=1):
         super().__init__(image_file, frames)
         self.life = 100
-        self.mana = 100
+        self.mana = 500
+        self.life_limit = 100
+        self.mana_limit = 100
         self.anim_state = False
         self.last_animation = 0.0
+        self.imune = False
+        self.imune_time = 1
     
     def regenerate_life(self, points=0):
         total_regen = 10 * points
-        self.life = self.life + total_regen if self.life + total_regen <= 100 else 100
+        self.life = self.life + total_regen if self.life + total_regen <= self.life_limit else self.life_limit
         
     def regenerate_mana(self, points=0):
-        self.mana += 10 * points
+        total_regen = 10 * points
+        self.mana = self.mana + total_regen if self.mana + total_regen <= self.mana_limit else self.mana_limit
     
 class Spell(Sprite):
     def __init__(self, x=0, y=0):
@@ -89,25 +94,27 @@ class Spell(Sprite):
         # Posição inicial (evita nascer fora da tela)
         self.x = x
         self.y = y
+        self.scale = 1.0
 
 class Rain(Sprite):
     def __init__(self, x=0, y=0, frames=None):
-        super().__init__('src/açoes/raio/frame-1.gif')
+        super().__init__('src/açoes/raio/frame1.png')
         self.x = x
         self.y = y
         self.frames = frames or []
         self.current_frame = 0
-        self.damage = 30
+        self.damage = 100
         self.last_animation = time()
-        self.animation_timeout = 0.05
+        self.animation_timeout = 0.1
         self.finished = False
+        self.wait = False
         self.has_hit = False  # garante que só dá dano uma vez
         self.enemy_hitbox_radius = 60  # tolerância do impacto
 
     def update(self, window, enemies):
         """Atualiza animação e aplica dano no frame do impacto."""
         now = time()
-        if now - self.last_animation >= self.animation_timeout:
+        if now - self.last_animation >= self.animation_timeout and self.current_frame != 4 or self.current_frame == 4 and now - self.last_animation >= 0.5:
             self.last_animation = now
             self.current_frame += 1
 
@@ -126,21 +133,10 @@ class Rain(Sprite):
                         enemy.life -= self.damage
                         if enemy.life <= 0:
                             enemy.alive = False
-                        # 💥 feedback visual: faz o inimigo piscar
-                        flash_surface = pygame.Surface((enemy.width, enemy.height), pygame.SRCALPHA)
-                        flash_surface.fill((255, 255, 255, 150))
-                        window.screen.blit(flash_surface, (enemy.x, enemy.y))
                         self.has_hit = True
 
         # desenha o raio em tela
         self.draw()
-
-
-class Regeneration(Sprite):
-    def __init__(self):
-        super().__init__('/src/açoes/rec_vida.png')
-        self.life_points = 5
-        self.animation_duration = 1
 
 class BlockOption(Sprite):
     def __init__(self, image_path, color, shape, selection_box):
@@ -151,6 +147,14 @@ class BlockOption(Sprite):
         self.width = self.image.get_width()
         self.height = self.image.get_height()
         self.rect = self.image.get_rect(topleft=(self.x, self.y))
+
+class Shield(Sprite):
+    def __init__(self, x=0, launch_time=0.0):
+        super().__init__('src/açoes/escudo.png')
+        self.x = x
+        self.y = 620 - self.height + 10 #720 - height do chão (100 pixels)
+        self.launch_time = launch_time
+        self.duration = 3
 
 class Menu:
     def __init__(self, mouse=Mouse(), window=Window(0, 0)):
@@ -188,6 +192,9 @@ class Menu:
         self.block_ocupied_positions = []
         for block in self.blocks:
             block.image = pygame.transform.scale(block.image, (self.main_window.width/100*6, self.main_window.height/100*6))
+            block.width = block.image.get_width()
+            block.height = block.image.get_height()
+            block.rect = block.image.get_rect()
             block.y = self.main_window.height
         self.last_block_renderization = time()
 
@@ -237,7 +244,10 @@ class Menu:
                 block.y = randint(-30, -5) - block.height
                 self.block_ocupied_positions.append(pos_x)
         for block in self.blocks:
-            block.y += self.block_vely * self.main_window.delta_time()
+            if self.main_window.mouse.is_over_object(block):
+                block.y += self.block_vely * 2 * self.main_window.delta_time()
+            else:
+                block.y += self.block_vely * self.main_window.delta_time()
 
     def animate_mage_hands(self, interval_secs):
         reached_top = self.mage_hand1.y >= self.origin_mage_hand1_y
@@ -263,6 +273,7 @@ class Menu:
         wait_blocks = 0
         mage_anim_interval = 0.05
         blocks_anim_interval = 0.05
+        init = time()
 
         self.preset_blocks()
         self.preset_play_btn()
@@ -279,7 +290,7 @@ class Menu:
             if play_pressed and now - wait_blocks >= 5:
                 break # End menu loop and goes to game loop
 
-            if self.player_mouse.is_over_object(self.play_btn):
+            if self.player_mouse.is_over_object(self.play_btn) and time() - init >= 0.5:
                 mage_anim_interval = 0.005
                 
                 if self.player_mouse.is_button_pressed(1):
@@ -311,7 +322,6 @@ class Menu:
 class Game:
     def __init__(self, main_window=Window(0, 0)):
 
-
         self.main_window = main_window
         self.esc_pressed = 0
         self.enemie_generation_rate = 20
@@ -319,15 +329,15 @@ class Game:
         self.score = 0
 
         self.ceu = Sprite('src/cenario/ceu.png')
-        self.chao = Sprite('src/cenario/chao2.png')
+        self.chao = Sprite('src/cenario/chao3.png')
         self.chao.y = self.main_window.height - (self.chao.height)
-        self.castelo = Sprite('src/cenario/castelo.png')
+        self.castelo = Sprite('src/cenario/castelo2.png')
         self.castelo.x = 0
-        self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height))
+        self.castelo.y = self.main_window.height - (self.castelo.height + (self.chao.height)) + 5
         self.mago = Mago('src/magos/mago_p.png')
         self.mago.x = (self.castelo.x + self.castelo.width - 20)
-        self.mago.y = self.main_window.height - (self.mago.height + (self.chao.height))
-        self.tetris = Tetris(self.main_window, 10, 15, 28, (self.main_window.width//2 - 190, self.main_window.height//2 - 300))
+        self.mago.y = self.chao.y - self.mago.height + 5
+        self.tetris = Tetris(self.main_window, 10, 15, 28, (self.main_window.width//2 - 190, self.main_window.height//2 - 350))
         self.selection_box = Sprite('src/cenario/select_back.png')
         self.selection_box.x = self.tetris.x - self.selection_box.width - 20
         self.selection_box.y = self.tetris.y + 70
@@ -388,15 +398,143 @@ class Game:
         self.current_spells = []
         self.spell_velx = 200
         self._load_spell_assets()
+        self.current_rain_clouds = []
         
         self.rain_frames = [
-            pygame.image.load(f"src/açoes/raio/frame-{i}.gif").convert_alpha()
-            for i in range(1, 10)
+            pygame.image.load(f'src/açoes/raio/frame{i}.png').convert_alpha()
+            for i in range(1, 9)
         ]
         self.current_rains = []
         self.last_rain_gen = 0
 
+        # Life regen stuff
+        self.last_life_regen_frame_change = 0
+        self.regen_life_frames = [
+            pygame.transform.scale(pygame.image.load(f'src/açoes/rec_vida/rec_vida{i}.png'), (self.mago.width+20, self.mago.height+20))
+            for i in range(1, 8)
+        ]
+        self.life_regenerations = []
+        self.life_regen_frame = 0
+
+        # Mana regen stuff
+        self.last_mana_regen_frame_change = 0
+        self.regen_mana_frames = [
+            pygame.transform.scale(pygame.image.load(f'src/açoes/rec_mana/rec_mana{i}.png'), (self.mago.width+20, self.mago.height+20))
+            for i in range(1, 7)
+        ]
+        self.mana_regenerations = []
+        self.mana_regen_frame = 0
+
         self.now = time()
+
+        # Difficulty stuff
+        self.next_threshold = 500
+        self.difficulty_stage = 0
+        # multiplicadores cumulativos aplicados a inimigos
+        self.dmg_multiplier = 1.0
+        self.speed_multiplier = 1.0
+        self.recoil_multiplier = 1.0
+        self.cooldown_multiplier = 1.0
+        self.life_multiplier = 1.0
+        
+        self.hud_shield = Sprite('src/hud/escudo.png')
+        self.hud_shield.x = self.mago.x + 700
+        self.hud_shield.y = self.chao.y + self.chao.height/2 - self.hud_shield.height/2
+        self.hud_rain = Sprite('src/hud/raio.png')
+        self.hud_rain.x = self.hud_shield.x + self.hud_shield.width + 20
+        self.hud_rain.y = self.hud_shield.y + 5
+
+        self.current_shields = []
+
+
+    def regen_life(self):
+        if len(self.life_regenerations) > 0:
+            if self.life_regen_frame >= 6:
+                self.life_regen_frame = 0
+                self.life_regenerations = []
+            elif self.now - self.last_life_regen_frame_change >= 0.5:
+                self.life_regen_frame += 1
+                for lr in self.life_regenerations:
+                    lr.x = self.mago.x - 5
+                    lr.y = self.mago.y + self.mago.height/2 - 25
+                    nf = self.life_regen_frame
+                    lr.image = self.regen_life_frames[self.life_regen_frame]
+                    lr.draw()
+                self.last_mana_regen_frame_change = self.now
+
+    def regen_mana(self):
+        if len(self.mana_regenerations) > 0:
+            if self.mana_regen_frame >= 5:
+                self.mana_regen_frame = 0
+                self.mana_regenerations = []
+            elif self.now - self.last_mana_regen_frame_change >= 0.5:
+                self.mana_regen_frame += 1
+                for mr in self.mana_regenerations:
+                    mr.x = self.mago.x - 5
+                    mr.y = self.mago.y + self.mago.height/2 - 25
+                    nf = self.mana_regen_frame
+                    mr.image = self.regen_mana_frames[self.mana_regen_frame]
+                    mr.draw()
+                self.last_regen_frame_change = self.now
+
+
+    def _maybe_increase_difficulty(self):
+        """
+        Verifica se passou o próximo threshold de score.
+        Ao passar, dobra a próxima marca e aumenta os multiplicadores.
+        Aplica o efeito aos inimigos já existentes.
+        """
+        if self.score < self.next_threshold:
+            return
+
+        # parâmetros de subida (ajuste se quiser mais/menos agressivo)
+        dmg_mul = 1.15        # +15% dano
+        speed_mul = 1.10      # +10% velocidade de movimento
+        recoil_mul = 1.10     # +10% intensidade de recuo (visível)
+        cooldown_mul = 0.95   # -5% no cooldown entre ataques (mais agressivo)
+        life_mul = 1.25
+
+        # atualiza estágio / próxima meta
+        self.difficulty_stage += 1
+        self.next_threshold *= 2
+
+        # acumula nos multiplicadores gerais
+        self.dmg_multiplier *= dmg_mul
+        self.speed_multiplier *= speed_mul
+        self.recoil_multiplier *= recoil_mul
+        self.cooldown_multiplier *= cooldown_mul
+        self.life_multiplier *= life_mul
+
+        # aplica imediatamente aos inimigos já existentes nos slots
+        for e in self.enemy_slots:
+            if not e:
+                continue
+            # ajuste seguro (int para dano)
+            try:
+                e.damage = int(e.damage * dmg_mul)
+            except Exception:
+                pass
+            try:
+                e.vel_x = e.vel_x * speed_mul
+            except Exception:
+                pass
+            try:
+                # se a propriedade existir
+                if hasattr(e, 'attack_recoil'):
+                    e.attack_recoil = e.attack_recoil * recoil_mul
+            except Exception:
+                pass
+            try:
+                # reduz o cooldown (mais agressivo). limite mínimo
+                if hasattr(e, 'attack_cooldown'):
+                    e.attack_cooldown = max(0.1, e.attack_cooldown * cooldown_mul)
+            except Exception:
+                pass
+
+        # debug
+        print(f"[DIFFICULTY] stage={self.difficulty_stage}, next={self.next_threshold}, "
+            f"dmg_mult={self.dmg_multiplier:.3f}, speed_mult={self.speed_multiplier:.3f}")
+
 
     def placar(self):
         self.main_window.draw_text(f"Score: {self.score}", 10, 40, size=25, color=(255, 255, 255))
@@ -451,18 +589,64 @@ class Game:
                     e = Gorila()
                 else:
                     e = Rato()
-
+                
                 # nasce fora da tela, anda até o slot
                 e.x = self.main_window.width + randint(50, 100)
-                e.y = self.chao.y - e.height
+                e.y = self.chao.y - e.height + 5
                 e.target_slot = i
                 e.state = "walking"
                 e.alive = True
                 e.last_attack = self.now
                 self.enemy_slots[i] = e
+                
+                # aplica multiplicadores atuais (faz novos inimigos já nascerem mais fortes)
+                try:
+                    e.damage = int(e.damage * self.dmg_multiplier)
+                except Exception:
+                    pass
+                try:
+                    e.vel_x = e.vel_x * self.speed_multiplier
+                except Exception:
+                    pass
+                try:
+                    if hasattr(e, 'attack_recoil'):
+                        e.attack_recoil = e.attack_recoil * self.recoil_multiplier
+                except Exception:
+                    pass
+                try:
+                    if hasattr(e, 'attack_cooldown'):
+                        e.attack_cooldown = max(0.1, e.attack_cooldown * self.cooldown_multiplier)
+                except Exception:
+                    pass
+                e.life *= self.life_multiplier
+
+                self.enemy_slots[i] = e
+
+    def launch_shield(self):
+        self.mago.mana -= 100
+        if not self.mago.imune:
+            self.mago.imune = True
+        shield = Shield(0, self.now)
+        x = int(self.mago.x + self.mago.width/2 - shield.width/2) + randint(-5, 5)
+        shield.x = x
+        self.current_shields.append(Shield(x, self.now))
+    
+    def update_shield(self):
+        for shield in self.current_shields:
+            if isinstance(shield, Shield):
+                if self.now - shield.launch_time >= shield.duration:
+                    self.current_shields.remove(shield)
+                else:
+                    shield.draw()
+        if len(self.current_shields) <= 0:
+            self.mago.imune = False
 
     def launch_rain(self):
-        """Lança um raio sobre cada inimigo visível, respeitando cooldown individual."""
+        """Lança um raio sobre cada inimigo visível, respeitando cooldown individual.
+        agora: cria nuvem+raio só quando for realmente spawnar o raio, e alinha o raio à superfície do chão.
+        """
+        # custo de mana (mantive teu comportamento)
+        self.mago.mana -= 50
         any_spawned = False
 
         for enemy in self.enemy_slots:
@@ -476,20 +660,50 @@ class Game:
             if self.now - enemy.last_rain_time >= 1.5:
                 enemy.last_rain_time = self.now
 
-                x = enemy.x + enemy.width // 2
-                y = 200  # um pouco acima do inimigo
+                # cria nuvem posicionada sobre o inimigo (apenas agora, quando vamos realmente spawnar)
+                nuvem = Sprite('src/cenario/nuvem_raio.png')
+                nuvem.width = nuvem.image.get_width()
+                nuvem.height = nuvem.image.get_height()
+                nuvem.x = int(enemy.x + enemy.width / 2 - nuvem.width / 2)
+                nuvem.y = -5
 
-                self.current_rains.append(Rain(x, y, self.rain_frames))
+                # cria o raio e alinha X ao centro do inimigo
+                raio = Rain(0, 0, self.rain_frames)
+                # garante que width/height estejam atualizados
+                raio.width = raio.image.get_width()
+                raio.height = raio.image.get_height()
+                raio.x = int(enemy.x + enemy.width / 2 - raio.width / 2)
+
+                # coloca o raio de forma que sua base coincida com o topo do chão:
+                # => raio.y + raio.height == self.chao.y
+                raio.y = int(self.chao.y - raio.height) + 5
+
+                # agora sim adiciona ambos às listas (permite manter sincronização por índice)
+                self.current_rain_clouds.append(nuvem)
+                self.current_rains.append(raio)
                 any_spawned = True
 
         print(f"[DEBUG] Raios ativos: {len(self.current_rains)} (spawned={any_spawned})")
 
+
     def update_rain(self):
-        """Atualiza todos os raios ativos."""
-        for rain in self.current_rains[:]:
+        """Atualiza todos os raios ativos. mantém listas sincronizadas."""
+        for idx in range(len(self.current_rains) - 1, -1, -1):
+            rain = self.current_rains[idx]
+            cloud = self.current_rain_clouds[idx]
+
+            # atualiza o raio (a própria função desenha também)
             rain.update(self.main_window, self.enemy_slots)
+            cloud.draw()
+
+            # quando terminar, remove nuvem+raio mantendo os índices alinhados
             if rain.finished:
-                self.current_rains.remove(rain)
+                try:
+                    self.current_rains.pop(idx)
+                    self.current_rain_clouds.pop(idx)
+                except Exception:
+                    # segurança caso algo estranho aconteça
+                    pass
                 
     def launch_spell(self, power=1):
         """Cria e adiciona um novo feitiço ofensivo escalonado visualmente pelo dano."""
@@ -503,12 +717,12 @@ class Game:
         spell.last_animation = self.now
         spell.last_collision_animation = 0
         spell.animation_timeout = 0.08
-        spell.damage = 10 * power  # dano proporcional à força
+        spell.damage *= power  # dano proporcional à força
 
         # --- Escala visual conforme dano ---
-        scale = 1.0 + (spell.damage / 100)
-        if scale > 1.8:
-            scale = 2.5
+        scale = 1.0 + (spell.damage / 100)/2
+        if scale > 4:
+            scale = 4
         elif scale < 1.0:
             scale = 1.0
 
@@ -518,6 +732,7 @@ class Game:
         spell.width = w
         spell.height = h
         spell.rect = spell.image.get_rect(topleft=(spell.x, spell.y))
+        spell.scale = scale
 
         print(f'Spell lançado com dano {spell.damage} (escala {scale:.2f}x)')
         self.current_spells.append(spell)
@@ -555,15 +770,17 @@ class Game:
                     spell.last_animation = self.now
                     spell.current_frame = (spell.current_frame + 1) % 5
                     spell.image = self.spell_frames[spell.current_frame]
+                    spell.image = pygame.transform.scale(spell.image, (spell.image.get_width()*spell.scale, spell.image.get_height()*spell.scale))
                     spell.width = spell.image.get_width()
                     spell.height = spell.image.get_height()
                     spell.rect = spell.image.get_rect(topleft=(spell.x, spell.y))
+                    spell.y = self.mago.y + self.mago.height//2 - spell.height//2 + 25
 
                 # colisão com inimigos
                 for enemy in self.enemy_slots:
                     if not enemy:
                         continue  # slot vazio
-                    if spell.collided(enemy):
+                    if spell.collided_perfect(enemy):
                         spell.state = "colliding"
                         spell.collided_with = enemy
                         spell.last_collision_animation = self.now
@@ -675,7 +892,7 @@ class Game:
 
                     # Aplica dano proporcional à distância
                     damage = int(e.damage * self.slot_damage_multiplier[e.target_slot])
-                    self.mago.life -= damage
+                    self.mago.life -= damage if not self.mago.imune else 0
 
                 # mantém frame neutro de ataque
                 e.draw()
@@ -708,9 +925,19 @@ class Game:
     def update_select_box(self):
         # Generate new block options and visually aligns it
         if len(self.current_block_options) < 4:
-            color = choice(self.block_colors)
-            shape = choice(self.block_shapes)
-            complete_block_name = f'{shape}_{color}.png'
+            if randint(0, 10) == randint(0, 10):
+                color = 'amarelo'
+                shape = 'O'
+                complete_block_name = 'peça_dourada.png'
+            else:
+                random_value = randint(0, 10)
+                if random_value <= 7:
+                    color = choice(['vermelho', 'verde'])
+                else:
+                    color = choice(['vermelho', 'azul'])
+                shape = choice(self.block_shapes)
+                complete_block_name = f'{shape}_{color}.png'
+            
             block = BlockOption(f'src/peças/{complete_block_name}', color, shape, self.selection_box)
             block.x = self.selection_box.x + self.selection_box.width/2 - block.width/2
             block.y = self.selection_box.y + self.selection_box.height - block.height if len(self.current_block_options) == 0 else self.current_block_options[-1].y - block.height - 25
@@ -739,14 +966,14 @@ class Game:
 
     def game_loop(self):
         last_limit_increse = 0
-        tm = 0
         kb = self.main_window.get_keyboard()
+        last_key_state = {"1": False, "2": False, "ESC": False}
         while True:
             self.now = time()
+            current_1 = kb.key_pressed("1")
+            current_2 = kb.key_pressed("2")
+            current_ESC = kb.key_pressed("ESC")
 
-            if kb.key_pressed('G') and self.now-tm >= 2:
-                self.tetris.spawn_piece_manual('O', 'vermelho')
-                tm = self.now
 
             # Aumenta o limite de inimigos a cada 60 segundos usando o total time
             if self.now - last_limit_increse >=60:
@@ -755,22 +982,27 @@ class Game:
             
             self.main_window.set_background_color('black')
 
-            # --- pausa ---
-            if kb.key_pressed('r'):
-                self.launch_rain()
-                print(f'{len(self.current_rains)} rains in game.')
-            if kb.key_pressed('ESC'):
+            # Verificação de pressionamento das teclas
+            if current_1 and not last_key_state["1"]:
+                if self.mago.mana >= 50:
+                    self.launch_rain()
+                    print(f'{len(self.current_rains)} rains in game.')
+            elif current_2 and not last_key_state["2"]:
+                if self.mago.mana >= 100:
+                    self.launch_shield()
+            elif current_ESC and not last_key_state["ESC"]:
                 pygame.time.wait(150)
                 resultado = self.pause_menu()
                 if resultado == "menu":
-                    self.esc_pressed = self.now
                     break
+
             if self.mago.life <= 0: # game over
                 break
             
             if self.tetris.game_over:
                 self.tetris.reset()
             self.animate_clouds()
+            self._maybe_increase_difficulty()
             self.generate_enemies()
             
             # Mage actions
@@ -791,14 +1023,35 @@ class Game:
                     vermelhos = red
                     amarelos = yellow
 
+                    if amarelos > 0:
+                        verdes *= 2
+                        azuis *= 2
+                        vermelhos *= 2
+                    
                     # Verde → lança feitiço ofensivo
                     if verdes > 0:
                         self.mago.regenerate_life(verdes)
-                
+                        for c in range(0, verdes):
+                            lr  = Sprite('src/açoes/rec_vida/rec_vida1.png')
+                            lr.width = lr.image.get_width()
+                            lr.height = lr.image.get_height()
+                            lr.x = self.mago.x - 5
+                            lr.y = self.mago.y + self.mago.height/2 - 10
+                            self.life_regenerations.append(lr)
+                        self.last_life_regen_frame_change = self.now
 
                     # Azul → cura vida
                     if azuis > 0:
                         self.mago.regenerate_mana(azuis)
+                        for c in range(azuis):
+                            mr = Sprite('src/açoes/rec_mana/rec_mana1.png')
+                            mr.width = mr.image.get_width()
+                            mr.height = mr.image.get_height()
+                            mr.x = self.mago.x - 5
+                            mr.y = self.mago.y + self.mago.height/2 - 10
+                            self.mana_regenerations.append(mr)
+                        self.last_mana_regen_frame_change = self.now
+
 
                     # Vermelho → regenera mana
                     if vermelhos > 0:
@@ -807,11 +1060,8 @@ class Game:
                         # posiciona certinho
                         spell = self.current_spells[-1]
                         spell.x = self.mago.x + self.mago.width - 20
-                        spell.y = self.mago.y + (self.mago.height // 3)
+                        spell.y = self.mago.y + self.mago.height//2 - spell.height//2
 
-                    # Amarelo → opcional
-                    # if amarelos > 0:
-                    #     self.mago.apply_buff("ataque", amarelos)
 
                 # limpa após processar tudo
                 self.tetris.last_cleared_color_counts.clear()
@@ -822,18 +1072,32 @@ class Game:
                 for cloud in self.current_clouds:
                     cloud.draw()
             self.chao.draw()
-            life_color = (0, 245, 0) if self.mago.life >= 70 else (231, 245, 0) if 50 <= self.mago.life < 70 else (255, 0, 0)
+            life_color = (0, 245, 0) if self.mago.life >= 70 else (231, 245, 0) if 50 <= self.mago.life < 70 else (255, 0, 0) if not self.mago.imune else (224,229,229)
             self.castelo.draw()
             self.mago.draw()
             self.placar()
             self.tetris.draw()
             self.animate_enemies()
+            self.regen_life()
+            self.regen_mana()
             self.update_spells()
+            self.update_shield()
             self.update_rain()
             self.update_select_box()
             self.create_piece()
 
             self.main_window.draw_text(f'LIFE: {self.mago.life}', self.mago.x, self.chao.y+25, 20, life_color, 'freemono', True, False)
-            self.main_window.draw_text(f'MANA: {self.mago.mana}', self.mago.x + 100, self.chao.y+25, 20, (0, 0, 255), 'freemono', True, False)
+            self.main_window.draw_text(f'MANA: {self.mago.mana}', self.mago.x + 150, self.chao.y+25, 20, (0, 0, 255), 'freemono', True, False)
+            if self.mago.mana >= 50:
+                self.hud_rain.unhide()
+            else:
+                self.hud_rain.hide()
+            
+            if self.mago.mana >= 100:
+                self.hud_shield.unhide()
+            else:
+                self.hud_shield.hide()
+            self.hud_rain.draw()
+            self.hud_shield.draw()
             self.main_window.update()
             self.tetris.update()
