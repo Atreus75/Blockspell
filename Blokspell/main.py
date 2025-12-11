@@ -30,5 +30,7 @@ while True:
     # --- INICIA UMA NOVA PARTIDA ---
     game = Game(main_window)
     game.game_loop()
-    game.soundtrack.stop()
+    if game.soundtrack.is_playing:
+        game.soundtrack.stop()
+
 
